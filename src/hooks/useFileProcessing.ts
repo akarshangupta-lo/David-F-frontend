@@ -7,7 +7,7 @@ export const useFileProcessing = () => {
   const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
   const eventSourceRef = useRef<EventSource | null>(null);
 
-  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const API_BASE_URL = import.meta.env.VITE_API_URL ;
 
   const uploadFiles = useCallback(async (selectedFiles: File[]) => {
     setUploading(true);
