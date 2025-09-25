@@ -45,6 +45,22 @@ export const WineOcrWizard: React.FC = () => {
 
   return (
     <div className="space-y-8">
+      {/* Drive Connection Status */}
+      <div className="flex items-center justify-end space-x-2">
+        <HardDrive className={drive.linked ? "text-green-500" : "text-red-500"} size={20} />
+        <span className={`text-sm font-medium ${drive.linked ? "text-green-600" : "text-red-600"}`}>
+          {drive.linked ? "Connected to Google Drive" : "Not Connected to Google Drive"}
+        </span>
+        {!drive.linked && (
+          <button
+            onClick={connectDrive}
+            className="ml-2 px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+          >
+            Connect
+          </button>
+        )}
+      </div>
+
       {/* Stepper simplified */}
       <div className="grid grid-cols-3 gap-4">
         <div className={`${step >= 2 ? 'border-red-600 bg-red-50' : 'border-gray-200'} p-3 rounded border`}>
