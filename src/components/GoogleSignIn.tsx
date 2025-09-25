@@ -1,6 +1,6 @@
-import React, { useEffect, useRef } from 'react';
-import { User, LogIn } from 'lucide-react';
-import { useAuth } from '../hooks/useAuth';
+import React, { useEffect, useRef, useState } from "react";
+import { User, LogIn } from "lucide-react";
+import { useAuth } from "../hooks/useAuth";
 
 declare global {
   interface Window {
@@ -13,20 +13,21 @@ export const GoogleSignIn: React.FC = () => {
   const googleButtonRef = useRef<HTMLDivElement>(null);
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
+  // Initialize Google login button
   useEffect(() => {
     if (!clientId) return;
     if (window.google && !user && !loading) {
       window.google.accounts.id.initialize({
         client_id: clientId,
-        callback: (response: any) => {
-          signIn(response.credential);
+        callback: async (response: any) => {
+          await signIn(response.credential);
         },
       });
 
       if (googleButtonRef.current) {
         window.google.accounts.id.renderButton(googleButtonRef.current, {
-          theme: 'outline',
-          size: 'large',
+          theme: "outline",
+          size: "large",
           width: 250,
         });
       }
@@ -46,17 +47,19 @@ export const GoogleSignIn: React.FC = () => {
 
   if (user) {
     return (
-      <div className="flex items-center space-x-3">
-        <div className="flex items-center space-x-2 bg-white rounded-lg px-3 py-2 shadow-sm border">
-          <User className="h-5 w-5 text-red-900" />
-          <span className="text-sm font-medium text-gray-900">{user.email}</span>
+      <div className="min-h-screen bg-gradient-to-br from-red-50 to-red-100 flex flex-col">
+        <div className="flex flex-col items-center justify-center flex-1 space-y-4">
+          <div className="flex items-center space-x-2 bg-white rounded-lg px-3 py-2 shadow-sm border">
+            <User className="h-5 w-5 text-red-900" />
+            <span className="text-sm font-medium text-gray-900">{user.email}</span>
+          </div>
+          <button
+            onClick={signOut}
+            className="px-4 py-2 text-sm font-medium text-red-700 hover:text-red-900 hover:bg-red-50 rounded-lg transition-colors"
+          >
+            Sign Out
+          </button>
         </div>
-        <button
-          onClick={signOut}
-          className="px-4 py-2 text-sm font-medium text-red-700 hover:text-red-900 hover:bg-red-50 rounded-lg transition-colors"
-        >
-          Sign Out
-        </button>
       </div>
     );
   }
@@ -74,7 +77,9 @@ export const GoogleSignIn: React.FC = () => {
 
         {(!clientId || error) && (
           <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
-            {!clientId ? 'Google Client ID missing. Set VITE_GOOGLE_CLIENT_ID and restart the dev server.' : error}
+            {!clientId
+              ? "Google Client ID missing. Set VITE_GOOGLE_CLIENT_ID and restart the dev server."
+              : error}
           </div>
         )}
 
@@ -85,7 +90,7 @@ export const GoogleSignIn: React.FC = () => {
         <div className="mt-6 text-center">
           <div className="flex items-center space-x-2 text-sm text-gray-500">
             <LogIn className="h-4 w-4" />
-            <span>Secure authentication with Google Drive integration</span>
+            <span>Secure authentication with Google integration</span>
           </div>
         </div>
       </div>

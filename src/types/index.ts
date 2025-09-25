@@ -70,6 +70,8 @@ export interface ProcessingTableRow extends FileUpload {
     output?: string;
     nhr?: string;
   };
+  baseName?: string; // normalized client filename (lowercased, no path)
+  originalBaseName?: string; // normalized original File.name
 }
 
 export interface ApiError {
