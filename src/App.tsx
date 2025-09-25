@@ -5,7 +5,7 @@ import { useAuth } from './hooks/useAuth';
 import { WineOcrWizard } from './components/WineOcrWizard';
 
 function App() {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
 
   if (!user) {
     return <GoogleSignIn />;
@@ -25,7 +25,15 @@ function App() {
                 <h1 className="text-lg font-semibold text-gray-900">Wine Label Processor</h1>
               </div>
             </div>
-            <GoogleSignIn />
+            <div className="flex items-center space-x-4">
+              <span className="text-sm text-gray-600">{user.email}</span>
+              <button
+                onClick={signOut}
+                className="px-4 py-2 text-sm font-medium text-red-700 hover:text-red-900 hover:bg-red-50 rounded-lg transition-colors"
+              >
+                Sign Out
+              </button>
+            </div>
           </div>
         </div>
       </header>

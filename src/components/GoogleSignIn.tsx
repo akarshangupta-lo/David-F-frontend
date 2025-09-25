@@ -46,22 +46,11 @@ export const GoogleSignIn: React.FC = () => {
   }
 
   if (user) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-red-50 to-red-100 flex flex-col">
-        <div className="flex flex-col items-center justify-center flex-1 space-y-4">
-          <div className="flex items-center space-x-2 bg-white rounded-lg px-3 py-2 shadow-sm border">
-            <User className="h-5 w-5 text-red-900" />
-            <span className="text-sm font-medium text-gray-900">{user.email}</span>
-          </div>
-          <button
-            onClick={signOut}
-            className="px-4 py-2 text-sm font-medium text-red-700 hover:text-red-900 hover:bg-red-50 rounded-lg transition-colors"
-          >
-            Sign Out
-          </button>
-        </div>
-      </div>
-    );
+    // Don't redirect if we're already on the homepage
+    if (window.location.pathname !== '/') {
+      window.location.href = '/';
+    }
+    return null;
   }
 
   return (
@@ -89,8 +78,8 @@ export const GoogleSignIn: React.FC = () => {
 
         <div className="mt-6 text-center">
           <div className="flex items-center space-x-2 text-sm text-gray-500">
-            <LogIn className="h-4 w-4" />
-            <span>Secure authentication with Google integration</span>
+            {/* <LogIn className="h-4 w-4" />
+            <span>Secure authentication with Google integration</span> */}
           </div>
         </div>
       </div>

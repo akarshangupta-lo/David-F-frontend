@@ -47,6 +47,9 @@ export const useAuth = () => {
       setUser(userData);
       localStorage.setItem('user', JSON.stringify(userData));
       localStorage.setItem('google_id_token', credential);
+      if (window.location.pathname !== '/') {
+        window.location.href = '/';
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Authentication failed');
     } finally {
@@ -59,6 +62,7 @@ export const useAuth = () => {
     localStorage.removeItem('user');
     localStorage.removeItem('google_id_token');
     window.google?.accounts?.id?.disableAutoSelect();
+    window.location.href = '/signin';
   }, []);
 
   useEffect(() => {
