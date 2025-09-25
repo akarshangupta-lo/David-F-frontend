@@ -8,7 +8,8 @@ export interface DriveState {
   structure?: Record<string, string>;
 }
 
-const API_BASE = import.meta.env.VITE_RENDER_URL || "http://localhost:8000";
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+
 
 /* ------------------ Hook ------------------ */
 export const useDrive = () => {
