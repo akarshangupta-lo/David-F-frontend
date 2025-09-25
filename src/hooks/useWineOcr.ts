@@ -105,12 +105,13 @@ export const useWineOcr = () => {
 			setOcrLocked(false);
 			setCompareLocked(false);
 			// Upload to Drive (input and upload) if linked
-			if (drive.linked && drive.structure?.inputId && drive.structure?.uploadId) {
+			if (drive.linked && drive.structure?.input && drive.structure?.upload) {
 				for (const row of newRows) {
 					if (!row.originalFile) continue;
 					try {
-						const inputId = await uploadToFolder(row.originalFile, drive.structure.inputId);
-						const uploadId = await uploadToFolder(row.originalFile, drive.structure.uploadId);
+						console.log('Uploading to drive folders:', drive.structure);
+						const inputId = await uploadToFolder(row.originalFile, drive.structure.input);
+						const uploadId = await uploadToFolder(row.originalFile, drive.structure.upload);
 						setRows(prev => prev.map(r => r.id === row.id ? ({ ...r, driveIds: { ...r.driveIds, input: inputId, upload: uploadId } }) : r));
 					} catch (e) {
 						console.error('Drive upload failed for', row.filename, e);

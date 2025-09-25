@@ -1,11 +1,25 @@
 // src/hooks/useDrive.ts
 import { useCallback, useState, useEffect } from "react";
 
+export interface DriveStructure {
+  root: string;
+  input: string;
+  output: string;
+  upload: string;
+  nhr: {
+    root: string;
+    search_failed: string;
+    ocr_failed: string;
+    manual_rejection: string;
+    others: string;
+  };
+}
+
 export interface DriveState {
   linked: boolean;
   ensuring?: boolean;
   error?: string | null;
-  structure?: Record<string, string>;
+  structure?: DriveStructure;
 }
 
 const API_BASE = import.meta.env.VITE_API_URL;
