@@ -1,5 +1,5 @@
 // src/hooks/useDrive.ts
-import { useCallback, useState } from "react";
+import { useCallback, useState, useEffect } from "react";
 
 export interface DriveState {
   linked: boolean;
@@ -14,6 +14,34 @@ const API_BASE = import.meta.env.VITE_API_URL;
 /* ------------------ Hook ------------------ */
 export const useDrive = () => {
   const [state, setState] = useState<DriveState>({ linked: false });
+
+  // Handle OAuth callback
+  const handleOAuthCallback = useCallback(async () => {
+    const params = new URLSearchParams(window.location.search);
+    const driveConnected = params.get('drive_connected');
+    const driveError = params.get('drive_error');
+
+    if (driveConnected === 'success') {
+      setState(prev => ({ ...prev, linked: true, ensuring: false, error: null }));
+      await checkDriveStatus(); // Verify and get folder structure
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (driveError) {
+      setState(prev => ({ 
+        ...prev, 
+        linked: false, 
+        ensuring: false, 
+        error: decodeURIComponent(driveError)
+      }));
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
+  // Check for OAuth callback on mount
+  useEffect(() => {
+    handleOAuthCallback();
+  }, [handleOAuthCallback]);
 
   /** Step 1: Connect Google Drive */
   const connectDrive = useCallback(async () => {
