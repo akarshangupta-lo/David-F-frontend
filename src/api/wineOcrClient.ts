@@ -21,10 +21,11 @@ export interface CompareMatchItem {
 const BASE_URL = (import.meta as any).env.VITE_RENDER_URL || (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
 const CLEAN_BASE = String(BASE_URL).replace(/\/+$/, '');
 
-function withTimeout<T>(promise: Promise<T>, ms: number, message = 'Request timed out'): Promise<T> {
-	const controller = new AbortController();
-	const timeout = setTimeout(() => controller.abort(message), ms);
-	return promise.finally(() => clearTimeout(timeout));
+function withTimeout<T>(fn: (signal: AbortSignal) => Promise<T>, ms: number, message = 'Request timed out'): Promise<T> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(message), ms);
+    return fn(controller.signal)
+        .finally(() => clearTimeout(timeout));
 }
 
 async function postJson<T>(path: string, body: any, timeoutMs = 60000): Promise<T> {
@@ -35,14 +36,24 @@ async function postJson<T>(path: string, body: any, timeoutMs = 60000): Promise<
 	if ((import.meta as any).env.VITE_ACCESS_TOKEN) headers['Authorization'] = `Bearer ${(import.meta as any).env.VITE_ACCESS_TOKEN}`;
 	if (!(body instanceof FormData)) headers['Content-Type'] = 'application/json';
 
-	const response = await withTimeout(
-		fetch(url, {
-			method: 'POST',
-			headers,
-			body: body instanceof FormData ? body : JSON.stringify(body)
-		}),
-		timeoutMs
-	);
+    let response: Response;
+    try {
+        response = await withTimeout(
+            (signal) => fetch(url, {
+                method: 'POST',
+                headers,
+                body: body instanceof FormData ? body : JSON.stringify(body),
+                mode: 'cors',
+                credentials: 'omit',
+                signal
+            }),
+            timeoutMs
+        );
+    } catch (e: any) {
+        // Network/CORS/timeout
+        const errMsg = e?.name === 'AbortError' ? 'Request timed out' : (e?.message || 'Failed to fetch');
+        throw new Error(errMsg);
+    }
 
 	if (!response.ok) {
 		let detail = `HTTP ${response.status}`;
@@ -54,7 +65,16 @@ async function postJson<T>(path: string, body: any, timeoutMs = 60000): Promise<
 
 async function getJson<T>(path: string, timeoutMs = 15000): Promise<T> {
 	const url = `${CLEAN_BASE}${path}`;
-	const response = await withTimeout(fetch(url, { method: 'GET' }), timeoutMs);
+    let response: Response;
+    try {
+        response = await withTimeout(
+            (signal) => fetch(url, { method: 'GET', mode: 'cors', credentials: 'omit', signal }),
+            timeoutMs
+        );
+    } catch (e: any) {
+        const errMsg = e?.name === 'AbortError' ? 'Request timed out' : (e?.message || 'Failed to fetch');
+        throw new Error(errMsg);
+    }
 	if (!response.ok) {
 		throw new Error(`HTTP ${response.status}`);
 	}
@@ -66,7 +86,11 @@ async function getJson<T>(path: string, timeoutMs = 15000): Promise<T> {
 }
 
 export async function healthCheck(timeoutMs = 15000): Promise<{ status: string } | string> {
-	return getJson<{ status: string } | string>('/', timeoutMs);
+    try {
+        return await getJson<{ status: string } | string>('/health', timeoutMs);
+    } catch {
+        return getJson<{ status: string } | string>('/', timeoutMs);
+    }
 }
 
 function asArray<T>(val: any): T[] {
@@ -110,12 +134,23 @@ export async function uploadImages(files: File[], timeoutMs = 120000): Promise<U
 	files.forEach(f => form.append('files', f));
 	let raw: any;
 	try {
-		raw = await postJson<any>('/upload-images', form, timeoutMs);
+        raw = await postJson<any>('/upload-images', form, timeoutMs);
 	} catch (e) {
 		// Fallback to alternate path used by some backends
-		raw = await postJson<any>('/upload', form, timeoutMs);
+        raw = await postJson<any>('/upload', form, timeoutMs);
 	}
-	const normalized = normalizeUploadItems(raw, files);
+    let normalized = normalizeUploadItems(raw, files);
+    // If backend returned fewer items than uploaded, fabricate placeholders for the rest
+    if (normalized.length < files.length) {
+        const existingNames = new Set(normalized.map(n => n.filename));
+        const extras: UploadResponseItem[] = [];
+        files.forEach((f, i) => {
+            if (!existingNames.has(f.name)) {
+                extras.push({ id: `${Date.now()}_${i}`, filename: f.name });
+            }
+        });
+        normalized = [...normalized, ...extras];
+    }
 	if (normalized.length === 0) {
 		console.error('Unexpected upload response shape:', raw);
 		throw new Error('Upload succeeded but response format was unexpected. Check console for details.');

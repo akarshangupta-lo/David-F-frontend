@@ -1,20 +1,23 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { Upload, Image, X, AlertCircle } from 'lucide-react';
 
 interface FileUploadZoneProps {
   onFilesSelected: (files: File[]) => void;
   uploading: boolean;
   disabled?: boolean;
+  onPreviewFile?: (file: File) => void;
 }
 
 export const FileUploadZone: React.FC<FileUploadZoneProps> = ({ 
   onFilesSelected, 
   uploading, 
-  disabled = false 
+  disabled = false,
+  onPreviewFile
 }) => {
   const [dragActive, setDragActive] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   const validateFiles = useCallback((files: File[]): { valid: File[], errors: string[] } => {
     const valid: File[] = [];
@@ -127,7 +130,7 @@ export const FileUploadZone: React.FC<FileUploadZoneProps> = ({
         onDragLeave={handleDragOut}
         onDragOver={handleDrag}
         onDrop={handleDrop}
-        onClick={() => document.getElementById('file-input')?.click()}
+        onClick={() => inputRef.current?.click()}
       >
         <input
           id="file-input"
@@ -137,6 +140,7 @@ export const FileUploadZone: React.FC<FileUploadZoneProps> = ({
           className="hidden"
           onChange={handleFileInput}
           disabled={disabled || uploading}
+          ref={inputRef}
         />
         
         <div className="space-y-3">
@@ -189,24 +193,32 @@ export const FileUploadZone: React.FC<FileUploadZoneProps> = ({
             </button>
           </div>
           
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-60 overflow-y-auto">
-            {selectedFiles.map((file, index) => (
-              <div key={index} className="flex items-center space-x-2 bg-gray-50 rounded-lg p-2">
-                <Image className="h-4 w-4 text-gray-500 flex-shrink-0" />
-                <span className="text-sm text-gray-700 flex-1 truncate" title={file.name}>
-                  {file.name}
-                </span>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removeFile(index);
-                  }}
-                  className="text-red-500 hover:text-red-700 flex-shrink-0"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            ))}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 max-h-60 overflow-y-auto">
+            {selectedFiles.map((file, index) => {
+              const objectUrl = URL.createObjectURL(file);
+              return (
+                <div key={index} className="flex items-center space-x-2 bg-gray-50 rounded-lg p-2">
+                  <img
+                    src={objectUrl}
+                    alt={file.name}
+                    className="h-10 w-10 object-cover rounded border cursor-pointer"
+                    onClick={() => onPreviewFile && onPreviewFile(file)}
+                  />
+                  <span className="text-sm text-gray-700 flex-1 truncate" title={file.name}>
+                    {file.name}
+                  </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeFile(index);
+                    }}
+                    className="text-red-500 hover:text-red-700 flex-shrink-0"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              );
+            })}
           </div>
 
           <div className="mt-4 flex justify-end space-x-2">
@@ -221,7 +233,7 @@ export const FileUploadZone: React.FC<FileUploadZoneProps> = ({
               disabled={uploading}
               className="px-4 py-2 text-sm font-medium text-white bg-red-900 rounded-lg hover:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {uploading ? 'Uploading...' : 'Process Files'}
+              {uploading ? 'Uploading...' : 'Upload Images'}
             </button>
           </div>
         </div>

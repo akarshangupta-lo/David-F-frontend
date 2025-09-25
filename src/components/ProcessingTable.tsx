@@ -16,6 +16,11 @@ interface ProcessingTableProps {
   onUpdateResult: (fileId: string, updates: any) => void;
   onRetryFile: (fileId: string) => void;
   onUploadToDrive?: (fileId: string) => void;
+  showStatus?: boolean;
+  showOcr?: boolean;
+  showMatches?: boolean;
+  showFinal?: boolean;
+  onPreviewClick?: (file: ProcessingTableRow) => void;
 }
 
 const StatusIcon: React.FC<{ status: string; error?: string }> = ({ status, error: _error }) => {
@@ -63,8 +68,21 @@ const WineMatchSelector: React.FC<{
   correctionStatus: CorrectionStatus;
   onSelectionChange: (option: string) => void;
   onCorrectionStatusChange: (status: CorrectionStatus) => void;
-}> = ({ matches, selectedOption, correctionStatus, onSelectionChange, onCorrectionStatusChange }) => {
+  name: string;
+  needsReview?: boolean;
+}> = ({ matches, selectedOption, correctionStatus, onSelectionChange, onCorrectionStatusChange, name, needsReview }) => {
   const [expanded, setExpanded] = React.useState(false);
+
+  // Preselect highest score if nothing selected yet
+  React.useEffect(() => {
+    if (!selectedOption || selectedOption === '') {
+      if (needsReview) {
+        onSelectionChange('NHR');
+      } else if (matches && matches.length > 0) {
+        onSelectionChange(matches[0].option);
+      }
+    }
+  }, [matches, selectedOption, onSelectionChange, needsReview]);
 
   const nhrOptions = [
     { value: 'search_failed', label: 'Search Failed' },
@@ -82,7 +100,7 @@ const WineMatchSelector: React.FC<{
             <label className="flex items-start space-x-3 cursor-pointer">
               <input
                 type="radio"
-                name={`match-${index}`}
+                name={name}
                 value={match.option}
                 checked={selectedOption === match.option}
                 onChange={(e) => onSelectionChange(e.target.value)}
@@ -118,7 +136,7 @@ const WineMatchSelector: React.FC<{
         <label className="flex items-start space-x-3 cursor-pointer">
           <input
             type="radio"
-            name={`match-nhr`}
+            name={name}
             value="NHR"
             checked={selectedOption === 'NHR'}
             onChange={(e) => onSelectionChange(e.target.value)}
@@ -153,7 +171,12 @@ export const ProcessingTable: React.FC<ProcessingTableProps> = ({
   files,
   onUpdateResult,
   onRetryFile,
-  onUploadToDrive
+  onUploadToDrive,
+  showStatus = true,
+  showOcr = true,
+  showMatches = true,
+  showFinal = true,
+  onPreviewClick,
 }) => {
   if (files.length === 0) {
     return (
@@ -208,42 +231,55 @@ export const ProcessingTable: React.FC<ProcessingTableProps> = ({
                 </td>
                <td className="px-6 py-4 whitespace-nowrap">
                  {file.previewUrl ? (
-                   <img src={file.previewUrl} alt={file.filename} className="h-12 w-12 object-cover rounded border" />
+                   <img
+                     src={file.previewUrl}
+                     alt={file.filename}
+                     className="h-12 w-12 object-cover rounded border cursor-pointer"
+                     onClick={() => onPreviewClick && onPreviewClick(file)}
+                   />
                  ) : (
                    <span className="text-xs text-gray-400">—</span>
                  )}
                </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <StatusBadge status={file.status} />
-                  {file.errorMessage && (
-                    <p className="text-xs text-red-600 mt-1">{file.errorMessage}</p>
+                  {showStatus ? (
+                    <>
+                      <StatusBadge status={file.status} />
+                      {file.errorMessage && (
+                        <p className="text-xs text-red-600 mt-1">{file.errorMessage}</p>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-xs text-gray-400">—</span>
                   )}
                 </td>
 
                 <td className="px-6 py-4">
                   <div className="max-w-xs">
-                    {file.result?.ocrText ? (
+                    {showOcr && file.result?.ocrText ? (
                       <div className="text-sm text-gray-900 whitespace-pre-wrap max-h-40 overflow-auto border border-gray-200 rounded-md bg-gray-50 p-2">
                         {file.result.ocrText}
                       </div>
                     ) : (
-                      <span className="text-sm text-gray-400">Processing...</span>
+                      <span className="text-sm text-gray-400">{showOcr ? 'Processing...' : '—'}</span>
                     )}
                   </div>
                 </td>
 
                 <td className="px-6 py-4">
                   <div className="max-w-sm">
-                    {file.result?.topMatches && file.result.topMatches.length > 0 ? (
+                    {showMatches && file.result?.topMatches && file.result.topMatches.length > 0 ? (
                       <WineMatchSelector
                         matches={file.result.topMatches}
                         selectedOption={file.result.selectedOption}
                         correctionStatus={file.result.correctionStatus}
                         onSelectionChange={(option) => onUpdateResult(file.id, { selectedOption: option })}
                         onCorrectionStatusChange={(status) => onUpdateResult(file.id, { correctionStatus: status })}
+                        name={`match-${file.id}`}
+                        needsReview={file.result.needsReview}
                       />
                     ) : (
-                      <span className="text-sm text-gray-400">Analyzing...</span>
+                      <span className="text-sm text-gray-400">{showMatches ? 'Analyzing...' : '—'}</span>
                     )}
                   </div>
                 </td>
@@ -251,16 +287,8 @@ export const ProcessingTable: React.FC<ProcessingTableProps> = ({
                 <td className="px-6 py-4">
                   <div className="max-w-xs">
                     <div className="text-sm text-gray-900 whitespace-pre-wrap max-h-32 overflow-auto border border-gray-200 rounded-md bg-gray-50 p-2">
-                      {file.result?.finalOutput || ''}
+                      {showFinal ? (file.result?.finalOutput || '') : ''}
                     </div>
-                    {file.status === 'formatted' && onUploadToDrive && (
-                      <button
-                        onClick={() => onUploadToDrive(file.id)}
-                        className="mt-2 inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
-                      >
-                        Upload
-                      </button>
-                    )}
                   </div>
                 </td>
 
@@ -271,7 +299,6 @@ export const ProcessingTable: React.FC<ProcessingTableProps> = ({
                         onClick={() => onRetryFile(file.id)}
                         className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
                       >
-                        <RefreshCw className="h-3 w-3 mr-1" />
                         Retry
                       </button>
                     )}
