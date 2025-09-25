@@ -51,14 +51,7 @@ export const WineOcrWizard: React.FC = () => {
         <span className={`text-sm font-medium ${drive.linked ? "text-green-600" : "text-red-600"}`}>
           {drive.linked ? "Connected to Google Drive" : "Not Connected to Google Drive"}
         </span>
-        {!drive.linked && (
-          <button
-            onClick={connectDrive}
-            className="ml-2 px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-          >
-            Connect
-          </button>
-        )}
+       
       </div>
 
       {/* Stepper simplified */}
