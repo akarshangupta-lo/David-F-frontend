@@ -271,28 +271,37 @@ export const useWineOcr = () => {
 	}, [rows]);
 
 	const uploadResultToDrive = useCallback(async (fileId: string) => {
+		console.log('Starting upload to drive for file:', fileId);
 		const row = rows.find(r => r.id === fileId);
-		if (!row || !drive.structure) return false;
+		if (!row) {
+			console.error('Row not found:', fileId);
+			return false;
+		}
+		if (!drive.structure) {
+			console.error('Drive structure not available');
+			return false;
+		}
+		console.log('Drive structure:', drive.structure);
 		try {
 			setError(null);
 			// ensure we have an upload Drive ID; if missing, push original file now
 			let uploadDriveId = row.driveIds?.upload;
-			if (!uploadDriveId && row.originalFile && drive.structure.uploadId) {
-				uploadDriveId = await uploadToFolder(row.originalFile, drive.structure.uploadId);
+			if (!uploadDriveId && row.originalFile && drive.structure.upload) {
+				uploadDriveId = await uploadToFolder(row.originalFile, drive.structure.upload);
 				setRows(prev => prev.map(r => r.id === row.id ? ({ ...r, driveIds: { ...r.driveIds, upload: uploadDriveId! } }) : r));
 			}
 			if (row.result?.correctionStatus === 'NHR' || row.result?.needsReview) {
 				const reason = (row.result?.correctionStatus || '').toLowerCase().replace(/\s+/g, '_');
 				let target: string | undefined;
 				switch (reason) {
-					case 'search_failed': target = drive.structure.nhrSearchFailedId; break;
+					case 'search_failed': target = drive.structure.nhr?.search_failed; break;
 					case 'manual_rejection':
-					case 'manual_fail': target = drive.structure.nhrManualFailId; break;
+					case 'manual_fail': target = drive.structure.nhr?.manual_rejection; break;
 					case 'ocr_failed':
-					case 'ocr_fail': target = drive.structure.nhrOcrFailId; break;
+					case 'ocr_fail': target = drive.structure.nhr?.ocr_failed; break;
 					case 'other':
-					case 'others': target = drive.structure.nhrOthersId; break;
-					default: target = drive.structure.nhrOthersId; break;
+					case 'others': target = drive.structure.nhr?.others; break;
+					default: target = drive.structure.nhr?.others; break;
 				}
 				if (!target) throw new Error('Missing NHR target folder');
 				if (row.originalFile) {
@@ -304,11 +313,11 @@ export const useWineOcr = () => {
 				}
 			} else {
 				// approved → output
-				if (!drive.structure.outputId) throw new Error('Missing output folder id');
+				if (!drive.structure.output) throw new Error('Missing output folder id');
 				if (row.originalFile) {
-					await uploadToFolder(row.originalFile, drive.structure.outputId);
+					await uploadToFolder(row.originalFile, drive.structure.output);
 				} else if (uploadDriveId) {
-					await copyToFolder(uploadDriveId, drive.structure.outputId, row.filename);
+					await copyToFolder(uploadDriveId, drive.structure.output, row.filename);
 				} else {
 					throw new Error('No source file for upload');
 				}
