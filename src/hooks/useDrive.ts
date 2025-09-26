@@ -20,6 +20,8 @@ export interface DriveState {
   ensuring?: boolean;
   error?: string | null;
   structure?: DriveStructure;
+  folder_structure_cached?: boolean;
+  pickle_file_exists?: boolean;
 }
 
 const API_BASE = import.meta.env.VITE_API_URL;
@@ -103,16 +105,28 @@ export const useDrive = () => {
       }
 
       const data = await res.json();
-      const linked = !!data.linked;
+      
+      // Extract main status fields and debug info
+      const {
+        linked = false,
+        folder_structure_cached = false,
+        pickle_file_exists = false,
+        debug = {}
+      } = data;
+
+      // Get structure from debug info if available
+      const structure = debug.drive_structure || {};
 
       setState({
-        linked,
+        linked: !!linked,
+        folder_structure_cached,
+        pickle_file_exists,
         ensuring: false,
         error: null,
-        structure: data.structure || {},
+        structure
       });
 
-      return linked;
+      return !!linked;
     } catch (e: any) {
       setState((prev) => ({
         ...prev,

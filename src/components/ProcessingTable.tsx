@@ -302,13 +302,19 @@ export const ProcessingTable: React.FC<ProcessingTableProps> = ({
                         Retry
                       </button>
                     )}
-                    {onUploadToDrive && file.status !== 'uploaded_to_drive' && file.status !== 'failed' && (
+                    {file.status === 'formatted' && onUploadToDrive && (
                       <button
                         onClick={() => onUploadToDrive(file.id)}
-                        className="inline-flex items-center px-3 py-1 border border-green-300 shadow-sm text-xs font-medium rounded-md text-green-700 bg-white hover:bg-green-50"
+                        className="inline-flex items-center px-3 py-1 border border-blue-300 shadow-sm text-xs font-medium rounded-md text-blue-700 bg-white hover:bg-blue-50"
                       >
                         Upload to Drive
                       </button>
+                    )}
+                    {file.status === 'uploaded_to_drive' && (
+                      <span className="inline-flex items-center px-3 py-1 text-xs font-medium text-green-700">
+                        <CheckCircle className="h-4 w-4 mr-1" />
+                        Uploaded
+                      </span>
                     )}
                   </div>
                 </td>
