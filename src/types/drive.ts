@@ -7,11 +7,10 @@ export interface DriveFile {
 export interface DriveUploadResponse {
   success?: boolean;
   error?: string;
-  target?: string;
   drive_file?: DriveFile;
 }
 
-export interface DriveFileSelection {
+export interface DriveUploadSelection {
   image: string;
   selected_name: string;
   target: 'output' | 'nhr';
@@ -19,7 +18,7 @@ export interface DriveFileSelection {
 }
 
 export interface DriveUploadRequest {
-  selections: DriveFileSelection[];
+  selections: DriveUploadSelection[];
 }
 
 export interface DriveStructure {

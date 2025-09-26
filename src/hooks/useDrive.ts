@@ -1,6 +1,6 @@
 // src/hooks/useDrive.ts
 import { useCallback, useState, useEffect } from "react";
-import { DriveState, DriveStructure, DriveUploadRequest, DriveUploadResponse, DriveFileSelection } from "../types/drive";
+import { DriveState, DriveStructure, DriveUploadRequest, DriveUploadResponse, DriveUploadSelection } from "../types/drive";
 
 const API_BASE = import.meta.env.VITE_API_URL;
 const USER_ID_KEY = 'wine_ocr_user_id';
@@ -155,7 +155,7 @@ export const useDrive = () => {
 
   /** Step 3: Upload file to Google Drive */
   const uploadToDrive = useCallback(
-    async (selections: DriveFileSelection[]): Promise<DriveUploadResponse> => {
+    async (selections: DriveUploadSelection[]): Promise<DriveUploadResponse> => {
       if (!state.linked) throw new Error("Drive not connected");
 
       const userId = getUserId();
@@ -167,18 +167,16 @@ export const useDrive = () => {
         throw new Error("User ID not found");
       }
 
-      // Validate NHR reasons are provided when needed
-      for (const selection of selections) {
-        if (selection.target === 'nhr' && !selection.nhr_reason) {
-          throw new Error('NHR reason is required for NHR uploads');
-        }
+      // Validate NHR selections have a reason
+      if (selections.some(s => s.target === 'nhr' && !s.nhr_reason)) {
+        throw new Error("NHR reason is required for NHR selections");
       }
 
       const payload: DriveUploadRequest = {
         selections
       };
 
-      const res = await fetch(`${API_BASE}/upload-to-drive?user_id=${encodeURIComponent(userId)}`, {
+      const res = await fetch(`${API_BASE}/upload-to-drive?user_id=${userId}`, {
         method: "POST",
         credentials: "include",
         headers: {
