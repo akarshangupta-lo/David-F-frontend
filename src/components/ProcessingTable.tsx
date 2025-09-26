@@ -15,7 +15,6 @@ interface ProcessingTableProps {
   files: ProcessingTableRow[];
   onUpdateResult: (fileId: string, updates: any) => void;
   onRetryFile: (fileId: string) => void;
-  onUploadToDrive?: (fileId: string) => void;
   showStatus?: boolean;
   showOcr?: boolean;
   showMatches?: boolean;
@@ -171,7 +170,6 @@ export const ProcessingTable: React.FC<ProcessingTableProps> = ({
   files,
   onUpdateResult,
   onRetryFile,
-  onUploadToDrive,
   showStatus = true,
   showOcr = true,
   showMatches = true,
@@ -300,14 +298,6 @@ export const ProcessingTable: React.FC<ProcessingTableProps> = ({
                         className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
                       >
                         Retry
-                      </button>
-                    )}
-                    {file.status === 'formatted' && onUploadToDrive && (
-                      <button
-                        onClick={() => onUploadToDrive(file.id)}
-                        className="inline-flex items-center px-3 py-1 border border-blue-300 shadow-sm text-xs font-medium rounded-md text-blue-700 bg-white hover:bg-blue-50"
-                      >
-                        Upload to Drive
                       </button>
                     )}
                     {file.status === 'uploaded_to_drive' && (

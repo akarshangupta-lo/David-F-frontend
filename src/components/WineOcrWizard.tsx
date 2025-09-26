@@ -265,7 +265,6 @@ export const WineOcrWizard: React.FC = () => {
                     if (!r.originalFile) continue;
                     await uploadResultToDrive(r.id);
                   }
-                  alert('Images uploaded successfully');
                   setStep(2);
                 }}
                 className="w-full sm:w-auto inline-flex items-center px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700"
