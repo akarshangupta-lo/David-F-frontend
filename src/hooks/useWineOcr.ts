@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { ProcessingTableRow, ProcessingResult } from '../types';
 import { uploadImages, processOcr, compareBatch, OcrProcessStatusItem, CompareMatchItem, healthCheck } from '../api/wineOcrClient';
 import { useDrive } from './useDrive';
+import { DriveUploadResponse } from '../types/drive';
 
 export type WizardStep = 1 | 2 | 3 | 4;
 
@@ -29,7 +30,7 @@ export const useWineOcr = () => {
 	const [error, setError] = useState<string | null>(null);
 	const cancellationRef = useRef<{ cancelled: boolean }>({ cancelled: false });
 	const [filter, setFilter] = useState<FilterState>({});
-	const { state: drive, uploadToFolder, moveToFolder, copyToFolder } = useDrive();
+	const { state: drive, uploadToDrive } = useDrive();
 
 	const reset = useCallback(() => {
 		setStep(2);
@@ -105,15 +106,26 @@ export const useWineOcr = () => {
 			setCompareStarted(false);
 			setOcrLocked(false);
 			setCompareLocked(false);
-			// Upload to Drive (input and upload) if linked
-			if (drive.linked && drive.structure?.input && drive.structure?.upload) {
+			// Upload to Drive (input) if linked
+			if (drive.linked) {
 				for (const row of newRows) {
 					if (!row.originalFile) continue;
 					try {
-						console.log('Uploading to drive folders:', drive.structure);
-						const inputId = await uploadToFolder(row.originalFile, drive.structure.input);
-						const uploadId = await uploadToFolder(row.originalFile, drive.structure.upload);
-						setRows(prev => prev.map(r => r.id === row.id ? ({ ...r, driveIds: { ...r.driveIds, input: inputId, upload: uploadId } }) : r));
+						console.log('Uploading to drive input folder...');
+						const uploadResponse = await uploadToDrive(
+							row.filename,
+							row.filename,
+							'input'
+						);
+						if (uploadResponse.success && uploadResponse.drive_file) {
+							setRows(prev => prev.map(r => r.id === row.id ? ({ 
+								...r, 
+								driveIds: { 
+									...r.driveIds, 
+									input: uploadResponse.drive_file.id
+								} 
+							}) : r));
+						}
 					} catch (e) {
 						console.error('Drive upload failed for', row.filename, e);
 					}
@@ -126,7 +138,7 @@ export const useWineOcr = () => {
 			setUploading(false);
 			setUploadMs(Math.max(0, Math.round(performance.now() - t0)));
 		}
-	}, [drive.linked, drive.structure, uploadToFolder]);
+	}, [drive.linked, uploadToDrive]);
 
 	const runOcr = useCallback(async () => {
 		setError(null);
@@ -273,71 +285,53 @@ export const useWineOcr = () => {
 
 	const uploadResultToDrive = useCallback(async (fileId: string) => {
 		const row = rows.find(r => r.id === fileId);
-		const userId = drive.userId;
-		if (!row || !drive.structure || !userId) {
-			const error = 'Upload failed: ' + 
-				(!row ? 'File not found. ' : '') +
-				(!drive.structure ? 'Drive not connected. ' : '') +
-				(!userId ? 'User not authenticated. ' : '');
-			setError(error.trim());
+		if (!row) {
+			setError('Upload failed: File not found');
+			return false;
+		}
+
+		if (!row.result) {
+			setError('Upload failed: File has no processing result');
 			return false;
 		}
 
 		try {
-			console.log('Starting drive upload for:', { fileId, status: row.status, structure: drive.structure, userId });
+			console.log('Starting drive upload for:', { fileId, status: row.status });
 			setError(null);
 
-			// ensure we have an upload Drive ID; if missing, push original file now
-			let uploadDriveId = row.driveIds?.upload;
-			if (!uploadDriveId && row.originalFile && drive.structure.upload) {
-				uploadDriveId = await uploadToFolder(row.originalFile, drive.structure.upload);
-				setRows(prev => prev.map(r => r.id === row.id ? ({ ...r, driveIds: { ...r.driveIds, upload: uploadDriveId! } }) : r));
-			}
+			const isNHR = row.result.correctionStatus === 'NHR' || row.result.needsReview;
+			const decision = isNHR 
+				? `nhr.${row.result.correctionStatus.toLowerCase()}` 
+				: 'accepted';
 
-			if (row.result?.correctionStatus === 'NHR' || row.result?.needsReview) {
-				const reason = (row.result?.correctionStatus || '').toLowerCase().replace(/\s+/g, '_');
-				let target: string | undefined;
+			// Figure out the target folder based on the decision
+			const target = decision === 'accepted' ? 'output' as const : decision.toLowerCase() as `nhr.${string}`;
 
-				switch (reason) {
-					case 'search_failed': target = drive.structure.nhr?.search_failed; break;
-					case 'manual_rejection':
-					case 'manual_fail': target = drive.structure.nhr?.manual_rejection; break;
-					case 'ocr_failed':
-					case 'ocr_fail': target = drive.structure.nhr?.ocr_failed; break;
-					case 'other':
-					case 'others': target = drive.structure.nhr?.others; break;
-					default: target = drive.structure.nhr?.others; break;
-				}
+			const uploadResponse = await uploadToDrive(
+				row.filename,
+				row.result.finalOutput || row.result.selectedOption,
+				target
+			);
 
-				if (!target) throw new Error('Missing NHR target folder');
-				
-				if (row.originalFile) {
-					await uploadToFolder(row.originalFile, target);
-				} else if (uploadDriveId) {
-					await copyToFolder(uploadDriveId, target, row.filename);
-				} else {
-					throw new Error('No source file for upload');
-				}
-			} else {
-				// approved → output
-				if (!drive.structure.output) throw new Error('Missing output folder id');
-				
-				if (row.originalFile) {
-					await uploadToFolder(row.originalFile, drive.structure.output);
-				} else if (uploadDriveId) {
-					await copyToFolder(uploadDriveId, drive.structure.output, row.filename);
-				} else {
-					throw new Error('No source file for upload');
-				}
-			}
+			setRows(prev => prev.map(r => 
+				r.id === fileId 
+					? { 
+							...r, 
+							status: 'uploaded_to_drive',
+							driveIds: { 
+								...r.driveIds, 
+								target: uploadResponse.drive_file?.id
+							}
+					  }
+					: r
+			));
 
-			setRows(prev => prev.map(r => r.id === fileId ? ({ ...r, status: 'uploaded_to_drive' }) : r));
 			return true;
 		} catch (e: any) {
 			setError(e?.message || 'Drive upload failed');
 			return false;
 		}
-	}, [rows, drive.structure, uploadToFolder, copyToFolder]);
+	}, [rows, uploadToDrive]);
 
 	const updateResult = useCallback((fileId: string, updates: Partial<ProcessingResult>) => {
 		setRows(prev => prev.map(r => r.id === fileId && r.result ? ({ ...r, result: { ...r.result, ...updates } }) : r));

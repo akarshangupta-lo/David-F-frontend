@@ -1,29 +1,6 @@
 // src/hooks/useDrive.ts
 import { useCallback, useState, useEffect } from "react";
-
-export interface DriveStructure {
-  root: string;
-  input: string;
-  output: string;
-  upload: string;
-  nhr: {
-    root: string;
-    search_failed: string;
-    ocr_failed: string;
-    manual_rejection: string;
-    others: string;
-  };
-}
-
-export interface DriveState {
-  linked: boolean;
-  ensuring?: boolean;
-  error?: string | null;
-  structure?: DriveStructure;
-  folder_structure_cached?: boolean;
-  pickle_file_exists?: boolean;
-  userId?: string | null;
-}
+import { DriveState, DriveStructure, DriveUploadRequest, DriveUploadResponse, DriveTarget } from "../types/drive";
 
 const API_BASE = import.meta.env.VITE_API_URL;
 const USER_ID_KEY = 'wine_ocr_user_id';
@@ -176,9 +153,9 @@ export const useDrive = () => {
     }
   }, []);
 
-  /** Step 3: Upload file via backend */
+  /** Step 3: Upload file to Google Drive */
   const uploadToDrive = useCallback(
-    async (file: File, newName?: string): Promise<void> => {
+    async (filePath: string, newName: string, target: DriveTarget): Promise<DriveUploadResponse> => {
       if (!state.linked) throw new Error("Drive not connected");
 
       const userId = getUserId();
@@ -190,20 +167,37 @@ export const useDrive = () => {
         throw new Error("User ID not found");
       }
 
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("user_id", userId);
-      if (newName) formData.append("new_name", newName);
+      const payload: DriveUploadRequest = {
+        user_id: userId,
+        file_path: filePath,
+        new_name: newName,
+        target
+      };
 
-      const res = await fetch(`${API_BASE}/upload-drive?user_id=${userId}`, {
+      const res = await fetch(`${API_BASE}/upload-to-drive`, {
         method: "POST",
         credentials: "include",
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
         throw new Error(`Drive upload failed: ${res.status}`);
       }
+
+      const data: DriveUploadResponse = await res.json();
+      
+      if (data.success && data.drive_file) {
+        const driveFile = data.drive_file; // Ensure we have a non-undefined value
+        setState(prev => ({
+          ...prev,
+          lastUploadedFiles: [driveFile]
+        }));
+      }
+
+      return data;
     },
     [state.linked]
   );
