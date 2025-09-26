@@ -273,20 +273,24 @@ export const useWineOcr = () => {
 
 	const uploadResultToDrive = useCallback(async (fileId: string) => {
 		const row = rows.find(r => r.id === fileId);
-		const userId = localStorage.getItem('wine_ocr_user_id');
+		const userId = drive.userId;
 		if (!row || !drive.structure || !userId) {
-			console.error('Upload failed: Missing row, drive structure or user ID', { row, structure: drive.structure, userId });
+			const error = 'Upload failed: ' + 
+				(!row ? 'File not found. ' : '') +
+				(!drive.structure ? 'Drive not connected. ' : '') +
+				(!userId ? 'User not authenticated. ' : '');
+			setError(error.trim());
 			return false;
 		}
 
 		try {
-			console.log('Starting drive upload for:', { fileId, status: row.status, structure: drive.structure });
+			console.log('Starting drive upload for:', { fileId, status: row.status, structure: drive.structure, userId });
 			setError(null);
 
 			// ensure we have an upload Drive ID; if missing, push original file now
 			let uploadDriveId = row.driveIds?.upload;
 			if (!uploadDriveId && row.originalFile && drive.structure.upload) {
-				uploadDriveId = await uploadToFolder(row.originalFile, drive.structure.upload, userId);
+				uploadDriveId = await uploadToFolder(row.originalFile, drive.structure.upload);
 				setRows(prev => prev.map(r => r.id === row.id ? ({ ...r, driveIds: { ...r.driveIds, upload: uploadDriveId! } }) : r));
 			}
 
