@@ -149,33 +149,18 @@ export const useDrive = () => {
         linked = false,
         folder_structure_cached = false,
         pickle_file_exists = false,
-        structure,
-        error: backendError
+        debug = {}
       } = data;
 
-      // Validate the required folders exist in the structure
-      const requiredFolders = ['root', 'input', 'output', 'upload'];
-      const missingFolders = requiredFolders.filter(folder => !structure?.[folder]);
-
-      if (missingFolders.length > 0) {
-        setState({
-          linked: false,
-          folder_structure_cached,
-          pickle_file_exists,
-          ensuring: false,
-          error: `Missing required folders: ${missingFolders.join(', ')}. Please reconnect to Drive.`,
-          structure: undefined,
-          userId
-        });
-        return false;
-      }
+      // Get structure from debug info if available
+      const structure = debug.drive_structure || {};
 
       setState({
         linked: !!linked,
         folder_structure_cached,
         pickle_file_exists,
         ensuring: false,
-        error: backendError || null,
+        error: null,
         structure,
         userId
       });

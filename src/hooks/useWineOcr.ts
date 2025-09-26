@@ -274,8 +274,6 @@ export const useWineOcr = () => {
 	const uploadResultToDrive = useCallback(async (fileId: string) => {
 		const row = rows.find(r => r.id === fileId);
 		const userId = drive.userId;
-
-		// Validate required data
 		if (!row || !drive.structure || !userId) {
 			const error = 'Upload failed: ' + 
 				(!row ? 'File not found. ' : '') +
@@ -285,24 +283,8 @@ export const useWineOcr = () => {
 			return false;
 		}
 
-		// Validate required folder IDs
-		if (!drive.structure.output || !drive.structure.upload) {
-			const missing = [];
-			if (!drive.structure.output) missing.push('output');
-			if (!drive.structure.upload) missing.push('upload');
-			setError(`Missing required folders: ${missing.join(', ')}. Please reconnect to Drive.`);
-			return false;
-		}
-
 		try {
-			console.log('Starting drive upload for:', { 
-				fileId, 
-				status: row.status, 
-				structure: drive.structure,
-				userId,
-				output_folder: drive.structure.output,
-				upload_folder: drive.structure.upload
-			});
+			console.log('Starting drive upload for:', { fileId, status: row.status, structure: drive.structure, userId });
 			setError(null);
 
 			// ensure we have an upload Drive ID; if missing, push original file now
