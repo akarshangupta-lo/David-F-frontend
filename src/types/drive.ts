@@ -11,9 +11,15 @@ export interface DriveUploadResponse {
   drive_file?: DriveFile;
 }
 
+export interface DriveFileSelection {
+  image: string;
+  selected_name: string;
+  target: 'output' | 'nhr';
+  nhr_reason?: 'search_failed' | 'ocr_failed' | 'manual_rejection' | 'others';
+}
+
 export interface DriveUploadRequest {
-  user_id: string;
-  target_folders?: string[];
+  selections: DriveFileSelection[];
 }
 
 export interface DriveStructure {

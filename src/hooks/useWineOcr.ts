@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { ProcessingTableRow, ProcessingResult } from '../types';
 import { uploadImages, processOcr, compareBatch, OcrProcessStatusItem, CompareMatchItem, healthCheck } from '../api/wineOcrClient';
 import { useDrive } from './useDrive';
-import { DriveUploadResponse } from '../types/drive';
+import { DriveUploadResponse, DriveFileSelection } from '../types/drive';
 
 export type WizardStep = 1 | 2 | 3 | 4;
 
@@ -106,29 +106,37 @@ export const useWineOcr = () => {
 			setCompareStarted(false);
 			setOcrLocked(false);
 			setCompareLocked(false);
-			// Upload to Drive (input, upload) if linked
+			// Upload to Drive if linked
 			if (drive.linked) {
-				for (const row of newRows) {
-					if (!row.originalFile) continue;
-					try {
-						console.log('Uploading to drive folders...');
-						const uploadResponse = await uploadToDrive(['input', 'upload']);
-						if (uploadResponse.success && uploadResponse.drive_file) {
-							setRows(prev => prev.map(r => r.id === row.id ? ({ 
-								...r, 
+				try {
+					console.log('Uploading to drive folders...');
+					// New files always go to both input and upload folders
+					const selections = newRows.map(row => ({
+						image: row.filename,
+						selected_name: row.filename,
+						target: 'output' as const  // 'output' sends to both input and upload folders
+					}));
+					const uploadResponse = await uploadToDrive(selections);
+					if (uploadResponse.success && uploadResponse.drive_file) {
+						setRows(prev => prev.map(r => {
+							const matchingRow = newRows.find(nr => nr.id === r.id);
+							if (!matchingRow) return r;
+							return { 
+								...r,
 								driveIds: { 
-									...r.driveIds, 
-									input: uploadResponse.drive_file.id
+									...r.driveIds,
+									input: uploadResponse.drive_file?.id
 								},
 								driveLinks: {
 									...r.driveLinks,
-									input: uploadResponse.drive_file.webViewLink
+									input: uploadResponse.drive_file?.webViewLink
 								}
-							}) : r));
-						}
-					} catch (e) {
-						console.error('Drive upload failed for', row.filename, e);
+							};
+						}));
 					}
+				} catch (e) {
+					console.error('Drive upload failed:', e);
+					setError(e instanceof Error ? e.message : 'Drive upload failed');
 				}
 			}
 			setStep(3);
@@ -300,11 +308,22 @@ export const useWineOcr = () => {
 			setError(null);
 
 			const isNHR = row.result.correctionStatus === 'NHR' || row.result.needsReview;
-			const targetFolders = isNHR 
-				? [`nhr.${row.result.correctionStatus.toLowerCase()}`] 
-				: ['output'];
+			const selection: DriveFileSelection = isNHR 
+				? {
+						image: row.serverFilename || row.filename,
+						selected_name: row.result.finalOutput || row.result.selectedOption,
+						target: 'nhr',
+						nhr_reason: row.result.correctionStatus === 'NHR' 
+							? 'others' 
+							: row.result.correctionStatus as 'search_failed' | 'ocr_failed' | 'manual_rejection' | 'others'
+					}
+				: {
+						image: row.serverFilename || row.filename,
+						selected_name: row.result.finalOutput || row.result.selectedOption,
+						target: 'output'
+					};
 
-			const uploadResponse = await uploadToDrive(targetFolders);
+			const uploadResponse = await uploadToDrive([selection]);
 			
 			if (uploadResponse.success) {
 				setRows(prev => prev.map(r => 
