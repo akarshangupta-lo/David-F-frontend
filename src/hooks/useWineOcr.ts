@@ -81,9 +81,10 @@ export const useWineOcr = () => {
 				const base = normalize(u.filename);
 				const srcFile = fileByBase.get(base) || files[idx] || files[0];
 				const preview = u.previewUrl || (srcFile ? URL.createObjectURL(srcFile) : undefined);
+				const userId = localStorage.getItem('wine_ocr_user_id') || 'me';
 				return {
 					id: u.id,
-					userId: 'me',
+					userId,
 					filename: u.filename,
 					baseName: base,
 					originalBaseName: normalize(srcFile?.name),
@@ -272,8 +273,9 @@ export const useWineOcr = () => {
 
 	const uploadResultToDrive = useCallback(async (fileId: string) => {
 		const row = rows.find(r => r.id === fileId);
-		if (!row || !drive.structure) {
-			console.error('Upload failed: Missing row or drive structure', { row, structure: drive.structure });
+		const userId = localStorage.getItem('wine_ocr_user_id');
+		if (!row || !drive.structure || !userId) {
+			console.error('Upload failed: Missing row, drive structure or user ID', { row, structure: drive.structure, userId });
 			return false;
 		}
 
@@ -284,7 +286,7 @@ export const useWineOcr = () => {
 			// ensure we have an upload Drive ID; if missing, push original file now
 			let uploadDriveId = row.driveIds?.upload;
 			if (!uploadDriveId && row.originalFile && drive.structure.upload) {
-				uploadDriveId = await uploadToFolder(row.originalFile, drive.structure.upload);
+				uploadDriveId = await uploadToFolder(row.originalFile, drive.structure.upload, userId);
 				setRows(prev => prev.map(r => r.id === row.id ? ({ ...r, driveIds: { ...r.driveIds, upload: uploadDriveId! } }) : r));
 			}
 

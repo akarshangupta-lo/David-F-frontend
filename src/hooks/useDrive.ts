@@ -22,9 +22,11 @@ export interface DriveState {
   structure?: DriveStructure;
   folder_structure_cached?: boolean;
   pickle_file_exists?: boolean;
+  userId?: string | null;
 }
 
 const API_BASE = import.meta.env.VITE_API_URL;
+const USER_ID_KEY = 'wine_ocr_user_id';
 
 
 /* ------------------ Hook ------------------ */
@@ -36,9 +38,12 @@ export const useDrive = () => {
     const params = new URLSearchParams(window.location.search);
     const driveConnected = params.get('drive_connected');
     const driveError = params.get('drive_error');
+    const userId = params.get('user_id');
 
-    if (driveConnected === 'success') {
-      setState(prev => ({ ...prev, linked: true, ensuring: false, error: null }));
+    if (driveConnected === 'success' && userId) {
+      // Store user ID in localStorage and state
+      localStorage.setItem(USER_ID_KEY, userId);
+      setState(prev => ({ ...prev, linked: true, ensuring: false, error: null, userId }));
       await checkDriveStatus(); // Verify and get folder structure
       // Clean up URL
       window.history.replaceState({}, '', window.location.pathname);
@@ -47,7 +52,8 @@ export const useDrive = () => {
         ...prev, 
         linked: false, 
         ensuring: false, 
-        error: decodeURIComponent(driveError)
+        error: decodeURIComponent(driveError),
+        userId: null
       }));
       // Clean up URL
       window.history.replaceState({}, '', window.location.pathname);
@@ -95,7 +101,8 @@ export const useDrive = () => {
   /** Step 2: Check Drive status (returns boolean) */
   const checkDriveStatus = useCallback(async (): Promise<boolean> => {
     try {
-      const res = await fetch(`${API_BASE}/drive-status`, {
+      const userId = localStorage.getItem(USER_ID_KEY);
+      const res = await fetch(`${API_BASE}/drive-status${userId ? `?user_id=${userId}` : ''}`, {
         method: "GET",
         credentials: "include",
       });
@@ -142,11 +149,14 @@ export const useDrive = () => {
     async (file: File, newName?: string): Promise<void> => {
       if (!state.linked) throw new Error("Drive not connected");
 
+      const userId = localStorage.getItem(USER_ID_KEY);
+      if (!userId) throw new Error("User ID not found");
+
       const formData = new FormData();
       formData.append("file", file);
       if (newName) formData.append("new_name", newName);
 
-      const res = await fetch(`${API_BASE}/upload-drive`, {
+      const res = await fetch(`${API_BASE}/upload-drive?user_id=${userId}`, {
         method: "POST",
         credentials: "include",
         body: formData,

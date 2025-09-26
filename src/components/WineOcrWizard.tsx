@@ -232,6 +232,9 @@ export const WineOcrWizard: React.FC = () => {
                 onChange={(e) => setFilter({ ...filter, search: e.target.value })}
                 className="text-sm border-gray-300 rounded px-2 py-1"
               />
+              {drive.userId && (
+                <span className="text-xs text-gray-600">User ID: {drive.userId}</span>
+              )}
             </div>
             <div className="space-x-2">
               <button
@@ -247,7 +250,6 @@ export const WineOcrWizard: React.FC = () => {
             files={rows}
             onUpdateResult={updateResult}
             onRetryFile={() => {}}
-            onUploadToDrive={uploadResultToDrive}
             showStatus
             showOcr
             showMatches
