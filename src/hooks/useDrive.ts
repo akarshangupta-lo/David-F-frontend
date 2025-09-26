@@ -1,6 +1,6 @@
 // src/hooks/useDrive.ts
 import { useCallback, useState, useEffect } from "react";
-import { DriveState, DriveStructure, DriveUploadRequest, DriveUploadResponse, DriveTarget } from "../types/drive";
+import { DriveState, DriveStructure, DriveUploadRequest, DriveUploadResponse } from "../types/drive";
 
 const API_BASE = import.meta.env.VITE_API_URL;
 const USER_ID_KEY = 'wine_ocr_user_id';
@@ -155,7 +155,7 @@ export const useDrive = () => {
 
   /** Step 3: Upload file to Google Drive */
   const uploadToDrive = useCallback(
-    async (filePath: string, newName: string, target: DriveTarget): Promise<DriveUploadResponse> => {
+    async (target_folders?: string[]): Promise<DriveUploadResponse> => {
       if (!state.linked) throw new Error("Drive not connected");
 
       const userId = getUserId();
@@ -169,9 +169,7 @@ export const useDrive = () => {
 
       const payload: DriveUploadRequest = {
         user_id: userId,
-        file_path: filePath,
-        new_name: newName,
-        target
+        target_folders
       };
 
       const res = await fetch(`${API_BASE}/upload-to-drive`, {

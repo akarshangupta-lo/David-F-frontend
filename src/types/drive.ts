@@ -11,13 +11,9 @@ export interface DriveUploadResponse {
   drive_file?: DriveFile;
 }
 
-export type DriveTarget = 'input' | 'output' | 'upload' | `nhr.${string}`;
-
 export interface DriveUploadRequest {
   user_id: string;
-  file_path: string;
-  new_name: string;
-  target: DriveTarget;
+  target_folders?: string[];
 }
 
 export interface DriveStructure {

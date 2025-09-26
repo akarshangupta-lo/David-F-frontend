@@ -69,6 +69,14 @@ export interface ProcessingTableRow extends FileUpload {
     upload?: string;
     output?: string;
     nhr?: string;
+    target?: string;
+  };
+  driveLinks?: {
+    input?: string;
+    upload?: string;
+    output?: string;
+    nhr?: string;
+    target?: string;
   };
   baseName?: string; // normalized client filename (lowercased, no path)
   originalBaseName?: string; // normalized original File.name

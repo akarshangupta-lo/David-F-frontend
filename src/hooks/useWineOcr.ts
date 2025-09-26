@@ -106,24 +106,24 @@ export const useWineOcr = () => {
 			setCompareStarted(false);
 			setOcrLocked(false);
 			setCompareLocked(false);
-			// Upload to Drive (input) if linked
+			// Upload to Drive (input, upload) if linked
 			if (drive.linked) {
 				for (const row of newRows) {
 					if (!row.originalFile) continue;
 					try {
-						console.log('Uploading to drive input folder...');
-						const uploadResponse = await uploadToDrive(
-							row.filename,
-							row.filename,
-							'input'
-						);
+						console.log('Uploading to drive folders...');
+						const uploadResponse = await uploadToDrive(['input', 'upload']);
 						if (uploadResponse.success && uploadResponse.drive_file) {
 							setRows(prev => prev.map(r => r.id === row.id ? ({ 
 								...r, 
 								driveIds: { 
 									...r.driveIds, 
 									input: uploadResponse.drive_file.id
-								} 
+								},
+								driveLinks: {
+									...r.driveLinks,
+									input: uploadResponse.drive_file.webViewLink
+								}
 							}) : r));
 						}
 					} catch (e) {
@@ -300,31 +300,33 @@ export const useWineOcr = () => {
 			setError(null);
 
 			const isNHR = row.result.correctionStatus === 'NHR' || row.result.needsReview;
-			const decision = isNHR 
-				? `nhr.${row.result.correctionStatus.toLowerCase()}` 
-				: 'accepted';
+			const targetFolders = isNHR 
+				? [`nhr.${row.result.correctionStatus.toLowerCase()}`] 
+				: ['output'];
 
-			// Figure out the target folder based on the decision
-			const target = decision === 'accepted' ? 'output' as const : decision.toLowerCase() as `nhr.${string}`;
-
-			const uploadResponse = await uploadToDrive(
-				row.filename,
-				row.result.finalOutput || row.result.selectedOption,
-				target
-			);
-
-			setRows(prev => prev.map(r => 
-				r.id === fileId 
-					? { 
-							...r, 
-							status: 'uploaded_to_drive',
-							driveIds: { 
-								...r.driveIds, 
-								target: uploadResponse.drive_file?.id
-							}
-					  }
-					: r
-			));
+			const uploadResponse = await uploadToDrive(targetFolders);
+			
+			if (uploadResponse.success) {
+				setRows(prev => prev.map(r => 
+					r.id === fileId 
+						? { 
+								...r, 
+								status: 'uploaded_to_drive',
+								driveIds: { 
+									...r.driveIds, 
+									target: uploadResponse.drive_file?.id
+								},
+								driveLinks: {
+									...r.driveLinks,
+									target: uploadResponse.drive_file?.webViewLink
+								}
+						  }
+						: r
+				));
+			} else if (uploadResponse.error) {
+				setError(`Drive upload failed: ${uploadResponse.error}`);
+				return false;
+			}
 
 			return true;
 		} catch (e: any) {

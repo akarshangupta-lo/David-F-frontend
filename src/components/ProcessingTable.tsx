@@ -301,10 +301,22 @@ export const ProcessingTable: React.FC<ProcessingTableProps> = ({
                       </button>
                     )}
                     {file.status === 'uploaded_to_drive' && (
-                      <span className="inline-flex items-center px-3 py-1 text-xs font-medium text-green-700">
-                        <CheckCircle className="h-4 w-4 mr-1" />
-                        Uploaded
-                      </span>
+                      <div className="space-y-1">
+                        <span className="inline-flex items-center px-3 py-1 text-xs font-medium text-green-700">
+                          <CheckCircle className="h-4 w-4 mr-1" />
+                          Uploaded
+                        </span>
+                        {file.driveLinks?.target && (
+                          <a
+                            href={file.driveLinks.target}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block text-xs text-blue-600 hover:text-blue-800"
+                          >
+                            View in Drive
+                          </a>
+                        )}
+                      </div>
                     )}
                   </div>
                 </td>
