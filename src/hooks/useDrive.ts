@@ -173,10 +173,12 @@ export const useDrive = () => {
       }
 
       const payload: DriveUploadRequest = {
+        user_id: userId,
         selections
+        
       };
 
-      const res = await fetch(`${API_BASE}/upload-to-drive?user_id=${userId}`, {
+      const res = await fetch(`${API_BASE}/upload-to-drive`, {
         method: "POST",
         credentials: "include",
         headers: {

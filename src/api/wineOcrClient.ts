@@ -169,10 +169,11 @@ export async function compareBatch(ids: string[], timeoutMs = 180000): Promise<C
 export async function exportCsv(payload: any, timeoutMs = 60000): Promise<Blob> {
 	const url = `${CLEAN_BASE}/export`;
 	const response = await withTimeout(
-		fetch(url, {
+		(signal) => fetch(url, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify(payload)
+			body: JSON.stringify(payload),
+			signal
 		}),
 		timeoutMs
 	);

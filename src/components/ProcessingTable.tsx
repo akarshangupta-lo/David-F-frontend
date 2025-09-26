@@ -20,6 +20,8 @@ interface ProcessingTableProps {
   showMatches?: boolean;
   showFinal?: boolean;
   onPreviewClick?: (file: ProcessingTableRow) => void;
+
+   onUploadToDrive?: (fileId: string) => Promise<boolean>;
 }
 
 const StatusIcon: React.FC<{ status: string; error?: string }> = ({ status, error: _error }) => {

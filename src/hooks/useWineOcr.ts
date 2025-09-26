@@ -124,11 +124,11 @@ export const useWineOcr = () => {
 								...r, 
 								driveIds: { 
 									...r.driveIds, 
-									input: uploadResponse.drive_file.id
+									input: uploadResponse.drive_file?.id
 								},
 								driveLinks: {
 									...r.driveLinks,
-									input: uploadResponse.drive_file.webViewLink
+									input: uploadResponse.drive_file?.webViewLink
 								}
 							}) : r));
 						}
