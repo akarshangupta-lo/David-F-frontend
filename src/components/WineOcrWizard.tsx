@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { AlertCircle, Loader2, Play, StopCircle, HardDrive, X } from 'lucide-react';
 import { FileUploadZone } from './FileUploadZone';
 import { ProcessingTable } from './ProcessingTable';
@@ -11,6 +11,7 @@ export const WineOcrWizard: React.FC = () => {
   const { user } = useAuth();
   const { state: drive, connectDrive } = useDrive();
   const [preview, setPreview] = React.useState<{ url: string; name: string } | null>(null);
+  const [selectedImage, setSelectedImage] = useState<{ url: string; name: string } | null>(null);
 
   const {
     step,
@@ -131,29 +132,31 @@ export const WineOcrWizard: React.FC = () => {
             onPreviewFile={(file) => setPreview({ url: URL.createObjectURL(file), name: file.name })}
           />
 
-          {/* Add Image Grid */}
-          {!uploading && allRows.length > 0 && (
-            <div className="mt-6 bg-white p-4 rounded-lg border border-gray-200">
-              <h3 className="text-sm font-medium text-gray-700 mb-3">Uploaded Images ({allRows.length})</h3>
+          {/* Uploaded Images Grid */}
+          {allRows.length > 0 && (
+            <div className="mt-4 p-4 bg-white rounded-lg border border-gray-200">
+              <h3 className="text-sm font-medium text-gray-700 mb-3">
+                Uploaded Images ({allRows.length})
+              </h3>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                 {allRows.map((file) => (
-                  <div 
-                    key={file.id} 
-                    onClick={() => setPreview({ 
-                      url: file.previewUrl || '', 
-                      name: file.filename 
+                  <div
+                    key={file.id}
+                    className="relative cursor-pointer"
+                    onClick={() => file.previewUrl && setSelectedImage({
+                      url: file.previewUrl,
+                      name: file.filename
                     })}
-                    className="cursor-pointer group relative"
                   >
                     <img
                       src={file.previewUrl}
                       alt={file.filename}
-                      className="h-24 w-24 object-cover rounded-lg border-2 border-gray-200 hover:border-red-500 transition-all"
+                      className="h-24 w-24 object-cover rounded-lg border-2 border-gray-200 hover:border-red-500 transition-colors"
                     />
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <div className="bg-black bg-opacity-50 text-white text-xs py-1 px-2 rounded">
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                      <span className="bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
                         Click to preview
-                      </div>
+                      </span>
                     </div>
                   </div>
                 ))}
@@ -342,29 +345,29 @@ export const WineOcrWizard: React.FC = () => {
             </div>
           )}
 
-          {/* Preview Modal - Add or update at root level */}
-          {preview && (
+          {/* Image Preview Modal */}
+          {selectedImage && (
             <div 
               className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75"
-              onClick={() => setPreview(null)}
+              onClick={() => setSelectedImage(null)}
             >
               <div 
-                className="relative bg-white rounded-lg shadow-xl max-w-4xl w-full m-4"
+                className="relative bg-white rounded-lg shadow-xl max-w-5xl w-full mx-4"
                 onClick={e => e.stopPropagation()}
               >
-                <div className="absolute right-0 top-0 p-4">
-                  <button 
-                    onClick={() => setPreview(null)}
-                    className="text-gray-400 hover:text-gray-500 focus:outline-none"
+                <div className="absolute top-0 right-0 p-4">
+                  <button
+                    onClick={() => setSelectedImage(null)}
+                    className="text-gray-500 hover:text-gray-700"
                   >
                     <X className="h-6 w-6" />
                   </button>
                 </div>
                 <div className="p-4">
                   <img
-                    src={preview.url}
-                    alt={preview.name}
-                    className="max-h-[80vh] w-auto mx-auto object-contain"
+                    src={selectedImage.url}
+                    alt={selectedImage.name}
+                    className="max-h-[80vh] mx-auto object-contain"
                   />
                 </div>
               </div>
