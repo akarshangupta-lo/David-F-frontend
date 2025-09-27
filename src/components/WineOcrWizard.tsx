@@ -168,7 +168,11 @@ export const WineOcrWizard: React.FC = () => {
               <button
                 onClick={runOcr}
                 disabled={ocrLoading || allRows.length === 0 || ocrLocked}
-                className="inline-flex items-center px-3 py-2 rounded bg-red-900 text-white disabled:opacity-50"
+                className={`inline-flex items-center px-3 py-2 rounded ${
+                  ocrLocked 
+                    ? 'bg-white text-gray-700 border border-gray-300' 
+                    : 'bg-red-900 text-white'
+                } disabled:opacity-50`}
               >
                 {ocrLoading ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -181,7 +185,11 @@ export const WineOcrWizard: React.FC = () => {
               <button
                 onClick={runCompare}
                 disabled={compareLoading || allRows.length === 0 || !canRunCompare || compareLocked}
-                className="inline-flex items-center px-3 py-2 rounded border border-gray-300 text-gray-700 bg-white disabled:opacity-50"
+                className={`inline-flex items-center px-3 py-2 rounded ${
+                  ocrLocked && !compareLocked 
+                    ? 'bg-red-900 text-white' 
+                    : 'bg-white text-gray-700 border border-gray-300'
+                } disabled:opacity-50`}
               >
                 {compareLoading ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
