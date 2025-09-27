@@ -131,29 +131,29 @@ export const WineOcrWizard: React.FC = () => {
             onPreviewFile={(file) => setPreview({ url: URL.createObjectURL(file), name: file.name })}
           />
 
-          {/* Add Preview Section */}
+          {/* Add Image Preview Grid */}
           {!uploading && allRows.length > 0 && (
-            <div className="mt-4">
-              <h3 className="text-sm font-medium text-gray-700 mb-2">Uploaded Images</h3>
-              <div className="grid grid-cols-4 gap-4">
+            <div className="mt-6 bg-white p-4 rounded-lg border border-gray-200">
+              <h3 className="text-sm font-medium text-gray-700 mb-3">Uploaded Images ({allRows.length})</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
                 {allRows.map((file) => (
                   <div 
                     key={file.id} 
-                    className="relative group cursor-pointer"
-                    onClick={() => setPreview({ 
-                      url: file.previewUrl || '', 
+                    onClick={() => file.previewUrl && setPreview({ 
+                      url: file.previewUrl, 
                       name: file.filename 
                     })}
+                    className="relative group cursor-pointer"
                   >
                     <img
                       src={file.previewUrl}
                       alt={file.filename}
-                      className="h-24 w-24 object-cover rounded-lg border border-gray-200 hover:border-red-500 transition-colors"
+                      className="h-24 w-24 object-cover rounded-lg border-2 border-gray-200 hover:border-red-500 transition-all"
                     />
-                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-opacity rounded-lg flex items-center justify-center">
-                      <span className="text-xs text-gray-700 bg-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-                        Click to preview
-                      </span>
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="bg-black bg-opacity-50 text-white text-xs py-1 px-2 rounded">
+                        Preview
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -342,21 +342,23 @@ export const WineOcrWizard: React.FC = () => {
             </div>
           )}
 
-          {/* Preview Modal - Keep at root level */}
+          {/* Preview Modal - Add or update at root level */}
           {preview && (
             <div 
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75"
               onClick={() => setPreview(null)}
             >
               <div 
-                className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4"
+                className="relative bg-white rounded-lg shadow-xl max-w-4xl w-full m-4"
                 onClick={e => e.stopPropagation()}
               >
-                <div className="p-4 border-b flex justify-between items-center">
-                  <h3 className="text-lg font-medium text-gray-900">{preview.name}</h3>
+                <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    {preview.name}
+                  </h3>
                   <button 
                     onClick={() => setPreview(null)}
-                    className="text-gray-500 hover:text-gray-700"
+                    className="text-gray-400 hover:text-gray-500 focus:outline-none"
                   >
                     Close
                   </button>
@@ -365,7 +367,7 @@ export const WineOcrWizard: React.FC = () => {
                   <img
                     src={preview.url}
                     alt={preview.name}
-                    className="max-h-[70vh] w-auto mx-auto object-contain"
+                    className="max-h-[70vh] w-auto mx-auto"
                   />
                 </div>
               </div>
