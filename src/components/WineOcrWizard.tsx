@@ -127,9 +127,39 @@ export const WineOcrWizard: React.FC = () => {
           <FileUploadZone
             onFilesSelected={(files) => handleUpload(files)}
             uploading={uploading}
-            disabled={!!(uploading || mustSignIn || mustLinkDrive)} // ✅ always boolean
+            disabled={!!(uploading || mustSignIn || mustLinkDrive)}
             onPreviewFile={(file) => setPreview({ url: URL.createObjectURL(file), name: file.name })}
           />
+
+          {/* Add Preview Section */}
+          {!uploading && allRows.length > 0 && (
+            <div className="mt-4">
+              <h3 className="text-sm font-medium text-gray-700 mb-2">Uploaded Images</h3>
+              <div className="grid grid-cols-4 gap-4">
+                {allRows.map((file) => (
+                  <div 
+                    key={file.id} 
+                    className="relative group cursor-pointer"
+                    onClick={() => setPreview({ 
+                      url: file.previewUrl || '', 
+                      name: file.filename 
+                    })}
+                  >
+                    <img
+                      src={file.previewUrl}
+                      alt={file.filename}
+                      className="h-24 w-24 object-cover rounded-lg border border-gray-200 hover:border-red-500 transition-colors"
+                    />
+                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-opacity rounded-lg flex items-center justify-center">
+                      <span className="text-xs text-gray-700 bg-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                        Click to preview
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {uploading && (
             <div className="mt-3 text-sm text-gray-700 inline-flex items-center">
@@ -312,24 +342,32 @@ export const WineOcrWizard: React.FC = () => {
             </div>
           )}
 
-          {/* Preview Modal */}
+          {/* Preview Modal - Keep at root level */}
           {preview && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-              <div className="bg-white rounded shadow-lg p-3 max-w-3xl w-full">
-                <div className="flex justify-between items-center mb-2">
-                  <h3 className="text-sm font-medium text-gray-900">{preview.name}</h3>
-                  <button
-                    className="text-sm text-gray-600"
+            <div 
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+              onClick={() => setPreview(null)}
+            >
+              <div 
+                className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="p-4 border-b flex justify-between items-center">
+                  <h3 className="text-lg font-medium text-gray-900">{preview.name}</h3>
+                  <button 
                     onClick={() => setPreview(null)}
+                    className="text-gray-500 hover:text-gray-700"
                   >
                     Close
                   </button>
                 </div>
-                <img
-                  src={preview.url}
-                  alt={preview.name}
-                  className="max-h-[80vh] w-auto mx-auto object-contain"
-                />
+                <div className="p-4">
+                  <img
+                    src={preview.url}
+                    alt={preview.name}
+                    className="max-h-[70vh] w-auto mx-auto object-contain"
+                  />
+                </div>
               </div>
             </div>
           )}
