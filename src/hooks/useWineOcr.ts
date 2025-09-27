@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ProcessingTableRow, ProcessingResult } from '../types';
-import { uploadImages, processOcr, compareBatch, OcrProcessStatusItem, CompareMatchItem, healthCheck } from '../api/wineOcrClient';
+import { uploadImages, processOcr, compareBatch, OcrProcessStatusItem, healthCheck } from '../api/wineOcrClient';
 import { useDrive } from './useDrive';
 import { DriveUploadResponse, DriveUploadSelection } from '../types/drive';
 
@@ -23,6 +23,37 @@ export const formatTime = (seconds: number): string => {
 const calculateEstimatedTime = (imageCount: number): number => {
   return imageCount * TIME_PER_IMAGE_SECONDS;
 };
+
+interface OcrResponse {
+  results: Array<{
+    original_filename: string;
+    new_filename: string;
+    formatted_name: string;
+  }>;
+}
+
+interface CompareResponse {
+  results: Array<{
+    image: string;
+    matches: {
+      orig: string;
+      final: string;
+      candidates: Array<{
+        gid?: string;
+        text: string;
+        score: number;
+        reason: string;
+      }>;
+      validated_gid?: string;
+      need_human_review?: boolean;
+      nhr?: boolean;
+    };
+  }>;
+}
+
+interface ApiError extends Error {
+  message: string;
+}
 
 export const useWineOcr = () => {
 	const [step, setStep] = useState<WizardStep>(2);
@@ -71,8 +102,9 @@ export const useWineOcr = () => {
 		try {
 			const res = await healthCheck();
 			setHealthStatus(typeof res === 'string' ? res : (res?.status || 'ok'));
-		} catch (e: any) {
-			setError(e?.message || 'Health check failed');
+		} catch (error: unknown) {
+			const err = error as ApiError;
+			setError(err.message || 'Health check failed');
 		} finally {
 			setHealthLoading(false);
 		}
@@ -150,8 +182,9 @@ export const useWineOcr = () => {
 				}
 			}
 			setStep(3);
-		} catch (e: any) {
-			setError(e?.message || 'Upload failed');
+		} catch (error: unknown) {
+			const err = error as ApiError;
+			setError(err?.message || 'Upload failed');
 		} finally {
 			setUploading(false);
 			setUploadMs(Math.max(0, Math.round(performance.now() - t0)));
@@ -173,7 +206,7 @@ export const useWineOcr = () => {
 			const estimatedTime = calculateEstimatedTime(ids.length);
 			console.log(`Processing ${ids.length} images. Estimated time: ${formatTime(estimatedTime)}`);
 			
-			const raw: any = await processOcr(ids);
+			const raw = await processOcr(ids) as OcrResponse | OcrProcessStatusItem[];
 
 			if (Array.isArray(raw) && raw.length > 0 && (raw[0] as OcrProcessStatusItem).id !== undefined) {
 				const ocrStatuses = raw as OcrProcessStatusItem[];
@@ -240,8 +273,9 @@ export const useWineOcr = () => {
 			const actualTime = Math.max(0, Math.round((performance.now() - t0) / 1000));
       console.log(`OCR completed in ${actualTime.toFixed(2)}s (Processed ${ids.length} images)`);
 			setOcrMs(Math.max(0, Math.round(performance.now() - t0)));
-		} catch (e: any) {
-			setError(e?.message || 'OCR failed');
+		} catch (error: unknown) {
+			const err = error as ApiError;
+			setError(err?.message || 'OCR failed');
 			setOcrLocked(true);
 			setOcrMs(Math.max(0, Math.round(performance.now() - t0)));
 		} finally {
@@ -257,7 +291,7 @@ export const useWineOcr = () => {
 		try {
 			const ids = rows.filter(r => r.status !== 'failed').map(r => r.id);
 			if (ids.length === 0) throw new Error('No successful OCR items to compare');
-			const raw: any = await compareBatch(ids);
+			const raw = await compareBatch(ids) as CompareResponse;
 
 			if (raw && Array.isArray(raw.results)) {
 				const results = raw.results as Array<{ image: string; matches: { orig: string; final: string; candidates: Array<{ gid?: string; text: string; score: number; reason: string }>; validated_gid?: string; need_human_review?: boolean; nhr?: boolean } }>;
@@ -299,8 +333,9 @@ export const useWineOcr = () => {
 			}
 			setCompareLocked(true);
 			setCompareMs(Math.max(0, Math.round(performance.now() - t0)));
-		} catch (e: any) {
-			setError(e?.message || 'Compare failed, try again');
+		} catch (error: unknown) {
+			const err = error as ApiError;
+			setError(err?.message || 'Compare failed, try again');
 			setCompareLocked(true);
 			setCompareMs(Math.max(0, Math.round(performance.now() - t0)));
 		} finally {
@@ -366,8 +401,9 @@ export const useWineOcr = () => {
 			}
 
 			return true;
-		} catch (e: any) {
-			setError(e?.message || 'Drive upload failed');
+		} catch (error: unknown) {
+			const err = error as ApiError;
+			setError(err.message || 'Drive upload failed');
 			return false;
 		}
 	}, [rows, uploadToDrive]);

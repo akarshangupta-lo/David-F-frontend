@@ -2,7 +2,7 @@ import React from 'react';
 import { AlertCircle, Loader2, Play, StopCircle, HardDrive } from 'lucide-react';
 import { FileUploadZone } from './FileUploadZone';
 import { ProcessingTable } from './ProcessingTable';
-import { useWineOcr } from '../hooks/useWineOcr';
+import { useWineOcr, TIME_PER_IMAGE_SECONDS, formatTime } from '../hooks/useWineOcr'; // Add imports
 import { GoogleSignIn } from './GoogleSignIn';
 import { useAuth } from '../hooks/useAuth';
 import { useDrive } from '../hooks/useDrive';
@@ -66,6 +66,25 @@ export const WineOcrWizard: React.FC = () => {
           <p className="text-sm font-medium">3. Review</p>
         </div>
       </div>
+
+      {/* Add Image Count Display */}
+      {allRows.length > 0 && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <span className="text-sm font-medium text-gray-700">Total Images:</span>
+              <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium">
+                {allRows.length}
+              </span>
+            </div>
+            {!ocrStarted && (
+              <div className="text-sm text-gray-600">
+                Estimated processing time: {formatTime(allRows.length * TIME_PER_IMAGE_SECONDS)}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Errors */}
       {error && (
@@ -132,12 +151,6 @@ export const WineOcrWizard: React.FC = () => {
           <div className="flex items-center justify-between">
             <div className="space-x-2">
               {/* Add estimated time display */}
-              {allRows.length > 0 && !ocrStarted && (
-                <div className="text-sm text-gray-600 mb-2">
-                  Estimated processing time: {formatTime(allRows.length * TIME_PER_IMAGE_SECONDS)} 
-                  ({allRows.length} {allRows.length === 1 ? 'image' : 'images'})
-                </div>
-              )}
               
               <button
                 onClick={runOcr}
