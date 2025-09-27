@@ -148,7 +148,7 @@ export const WineOcrWizard: React.FC = () => {
       {/* Step 3: Processing */}
       {step === 3 && (
         <div className="space-y-4">
-          {/* Add estimated time display */}
+          {/* Estimated time display */}
           {allRows.length > 0 && (
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
               <div className="flex items-center justify-between">
@@ -191,6 +191,7 @@ export const WineOcrWizard: React.FC = () => {
                 )}
                 {compareLocked ? 'Compared' : 'Compare'}
               </button>
+
               <button
                 onClick={cancel}
                 disabled={!ocrLoading && !compareLoading}
@@ -204,7 +205,7 @@ export const WineOcrWizard: React.FC = () => {
 
           {(ocrLoading || compareLoading) && (
             <div className="text-sm text-gray-700 inline-flex items-center">
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />{' '}
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               {ocrLoading ? 'Running OCR...' : 'Comparing matches...'}
             </div>
           )}
@@ -304,6 +305,7 @@ export const WineOcrWizard: React.FC = () => {
             </div>
           )}
 
+          {/* Preview Modal */}
           {preview && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
               <div className="bg-white rounded shadow-lg p-3 max-w-3xl w-full">
@@ -329,7 +331,5 @@ export const WineOcrWizard: React.FC = () => {
     </div>
   );
 };
-      )}
-    </div>
   );
 };
