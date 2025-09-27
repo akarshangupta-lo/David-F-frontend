@@ -148,6 +148,20 @@ export const WineOcrWizard: React.FC = () => {
       {/* Step 3: Processing */}
       {step === 3 && (
         <div className="space-y-4">
+          {/* Add estimated time display */}
+          {allRows.length > 0 && (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm font-medium text-gray-700">Processing {allRows.length} {allRows.length === 1 ? 'image' : 'images'}</span>
+                  <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium">
+                    Estimated time: {formatTime(allRows.length * TIME_PER_IMAGE_SECONDS)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center justify-between">
             <div className="space-x-2">
               {/* Add estimated time display */}
@@ -316,9 +330,6 @@ export const WineOcrWizard: React.FC = () => {
           )}
         </div>
       )}
-    </div>
-  );
-};
     </div>
   );
 };
