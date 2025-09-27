@@ -125,12 +125,11 @@ export const WineOcrWizard: React.FC = () => {
           )}
 
           <FileUploadZone
-  onFilesSelected={(files) => handleUpload(files)}
-  uploading={uploading}
-  disabled={!!(uploading || mustSignIn || mustLinkDrive)} // ✅ always boolean
-  onPreviewFile={(file) => setPreview({ url: URL.createObjectURL(file), name: file.name })}
-/>
-
+            onFilesSelected={(files) => handleUpload(files)}
+            uploading={uploading}
+            disabled={!!(uploading || mustSignIn || mustLinkDrive)} // ✅ always boolean
+            onPreviewFile={(file) => setPreview({ url: URL.createObjectURL(file), name: file.name })}
+          />
 
           {uploading && (
             <div className="mt-3 text-sm text-gray-700 inline-flex items-center">
@@ -329,7 +328,5 @@ export const WineOcrWizard: React.FC = () => {
         </div>
       )}
     </div>
-  );
-};
   );
 };
