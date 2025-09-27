@@ -148,23 +148,15 @@ export const WineOcrWizard: React.FC = () => {
       {/* Step 3: Processing */}
       {step === 3 && (
         <div className="space-y-4">
-          {/* Add estimated time display */}
-          {allRows.length > 0 && (
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <span className="text-sm font-medium text-gray-700">Processing {allRows.length} {allRows.length === 1 ? 'image' : 'images'}</span>
-                  <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium">
-                    Estimated time: {formatTime(allRows.length * TIME_PER_IMAGE_SECONDS)}
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-
           <div className="flex items-center justify-between">
             <div className="space-x-2">
               {/* Add estimated time display */}
+              {allRows.length > 0 && !ocrStarted && (
+                <div className="text-sm text-gray-600 mb-2">
+                  Estimated processing time: {formatTime(allRows.length * TIME_PER_IMAGE_SECONDS)} 
+                  ({allRows.length} {allRows.length === 1 ? 'image' : 'images'})
+                </div>
+              )}
               
               <button
                 onClick={runOcr}
@@ -178,6 +170,7 @@ export const WineOcrWizard: React.FC = () => {
                 )}
                 {ocrLocked ? 'OCR Complete' : 'Run OCR'}
               </button>
+              
               <button
                 onClick={runCompare}
                 disabled={compareLoading || allRows.length === 0 || !canRunCompare || compareLocked}
@@ -205,11 +198,6 @@ export const WineOcrWizard: React.FC = () => {
             <div className="text-sm text-gray-700 inline-flex items-center">
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />{' '}
               {ocrLoading ? 'Running OCR...' : 'Comparing matches...'}
-            </div>
-          )}
-          {ocrMs != null && !ocrLoading && ocrLocked && (
-            <div className="text-xs text-gray-500">
-              OCR completed in {(ocrMs / 1000).toFixed(2)} s
             </div>
           )}
           {compareMs != null && !compareLoading && compareLocked && (
@@ -321,6 +309,18 @@ export const WineOcrWizard: React.FC = () => {
                   </button>
                 </div>
                 <img
+                  src={preview.url}
+                  alt={preview.name}
+                  className="max-h-[80vh] w-auto mx-auto object-contain"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
                   src={preview.url}
                   alt={preview.name}
                   className="max-h-[80vh] w-auto mx-auto object-contain"
