@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertCircle, Loader2, Play, StopCircle, HardDrive } from 'lucide-react';
+import { AlertCircle, Loader2, Play, StopCircle, HardDrive, X } from 'lucide-react';
 import { FileUploadZone } from './FileUploadZone';
 import { ProcessingTable } from './ProcessingTable';
 import { useWineOcr, TIME_PER_IMAGE_SECONDS, formatTime } from '../hooks/useWineOcr'; // Add imports
@@ -131,7 +131,7 @@ export const WineOcrWizard: React.FC = () => {
             onPreviewFile={(file) => setPreview({ url: URL.createObjectURL(file), name: file.name })}
           />
 
-          {/* Add Image Preview Grid */}
+          {/* Add Image Grid */}
           {!uploading && allRows.length > 0 && (
             <div className="mt-6 bg-white p-4 rounded-lg border border-gray-200">
               <h3 className="text-sm font-medium text-gray-700 mb-3">Uploaded Images ({allRows.length})</h3>
@@ -139,11 +139,11 @@ export const WineOcrWizard: React.FC = () => {
                 {allRows.map((file) => (
                   <div 
                     key={file.id} 
-                    onClick={() => file.previewUrl && setPreview({ 
-                      url: file.previewUrl, 
+                    onClick={() => setPreview({ 
+                      url: file.previewUrl || '', 
                       name: file.filename 
                     })}
-                    className="relative group cursor-pointer"
+                    className="cursor-pointer group relative"
                   >
                     <img
                       src={file.previewUrl}
@@ -152,7 +152,7 @@ export const WineOcrWizard: React.FC = () => {
                     />
                     <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                       <div className="bg-black bg-opacity-50 text-white text-xs py-1 px-2 rounded">
-                        Preview
+                        Click to preview
                       </div>
                     </div>
                   </div>
@@ -352,22 +352,19 @@ export const WineOcrWizard: React.FC = () => {
                 className="relative bg-white rounded-lg shadow-xl max-w-4xl w-full m-4"
                 onClick={e => e.stopPropagation()}
               >
-                <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-                  <h3 className="text-lg font-medium text-gray-900">
-                    {preview.name}
-                  </h3>
+                <div className="absolute right-0 top-0 p-4">
                   <button 
                     onClick={() => setPreview(null)}
                     className="text-gray-400 hover:text-gray-500 focus:outline-none"
                   >
-                    Close
+                    <X className="h-6 w-6" />
                   </button>
                 </div>
                 <div className="p-4">
                   <img
                     src={preview.url}
                     alt={preview.name}
-                    className="max-h-[70vh] w-auto mx-auto"
+                    className="max-h-[80vh] w-auto mx-auto object-contain"
                   />
                 </div>
               </div>
