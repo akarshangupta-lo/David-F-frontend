@@ -12,6 +12,18 @@ export interface FilterState {
 	search?: string;
 }
 
+const TIME_PER_IMAGE_SECONDS = 15;
+
+const calculateEstimatedTime = (imageCount: number): number => {
+  return imageCount * TIME_PER_IMAGE_SECONDS;
+};
+
+const formatTime = (seconds: number): string => {
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return minutes > 0 ? `${minutes} min ${remainingSeconds} sec` : `${seconds} sec`;
+};
+
 export const useWineOcr = () => {
 	const [step, setStep] = useState<WizardStep>(2);
 	const [rows, setRows] = useState<ProcessingTableRow[]>([]);
@@ -152,9 +164,15 @@ export const useWineOcr = () => {
 		setOcrStarted(true);
 		cancellationRef.current.cancelled = false;
 		const t0 = performance.now();
+		
 		try {
 			const ids = rows.map(r => r.id);
 			if (ids.length === 0) throw new Error('No files to process');
+			
+			// Calculate and show estimated time
+			const estimatedTime = calculateEstimatedTime(ids.length);
+			console.log(`Processing ${ids.length} images. Estimated time: ${formatTime(estimatedTime)}`);
+			
 			const raw: any = await processOcr(ids);
 
 			if (Array.isArray(raw) && raw.length > 0 && (raw[0] as OcrProcessStatusItem).id !== undefined) {
@@ -219,7 +237,8 @@ export const useWineOcr = () => {
 			}
 			// lock OCR after one run regardless of result
 			setOcrLocked(true);
-			setOcrLocked(true);
+			const actualTime = Math.max(0, Math.round((performance.now() - t0) / 1000));
+      console.log(`OCR completed in ${actualTime.toFixed(2)}s (Processed ${ids.length} images)`);
 			setOcrMs(Math.max(0, Math.round(performance.now() - t0)));
 		} catch (e: any) {
 			setError(e?.message || 'OCR failed');
