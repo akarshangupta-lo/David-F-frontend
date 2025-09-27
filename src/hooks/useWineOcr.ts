@@ -12,16 +12,16 @@ export interface FilterState {
 	search?: string;
 }
 
-const TIME_PER_IMAGE_SECONDS = 15;
+export const TIME_PER_IMAGE_SECONDS = 15;
 
-const calculateEstimatedTime = (imageCount: number): number => {
-  return imageCount * TIME_PER_IMAGE_SECONDS;
-};
-
-const formatTime = (seconds: number): string => {
+export const formatTime = (seconds: number): string => {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
   return minutes > 0 ? `${minutes} min ${remainingSeconds} sec` : `${seconds} sec`;
+};
+
+const calculateEstimatedTime = (imageCount: number): number => {
+  return imageCount * TIME_PER_IMAGE_SECONDS;
 };
 
 export const useWineOcr = () => {

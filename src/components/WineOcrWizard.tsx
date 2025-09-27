@@ -131,6 +131,14 @@ export const WineOcrWizard: React.FC = () => {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="space-x-2">
+              {/* Add estimated time display */}
+              {allRows.length > 0 && !ocrStarted && (
+                <div className="text-sm text-gray-600 mb-2">
+                  Estimated processing time: {formatTime(allRows.length * TIME_PER_IMAGE_SECONDS)} 
+                  ({allRows.length} {allRows.length === 1 ? 'image' : 'images'})
+                </div>
+              )}
+              
               <button
                 onClick={runOcr}
                 disabled={ocrLoading || allRows.length === 0 || ocrLocked}
