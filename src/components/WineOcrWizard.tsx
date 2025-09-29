@@ -302,127 +302,129 @@ export const WineOcrWizard: React.FC = () => {
                 name: file.filename,
               })
             }
+            className="text-sm md:text-base"
           />
         </div>
       )}
 
       {/* Step 4: Review */}
-      {step === 4 && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <select
-                value={filter.status || ""}
-                onChange={(e) =>
-                  setFilter({
-                    ...filter,
-                    status: (e.target.value as any) || undefined,
-                  })
-                }
-                className="text-sm border-gray-300 rounded"
-              >
-                <option value="">All Statuses</option>
-                <option value="formatted">Formatted</option>
-                <option value="failed">Failed</option>
-              </select>
-              <label className="text-sm inline-flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={filter.needsReview || false}
-                  onChange={(e) =>
-                    setFilter({ ...filter, needsReview: e.target.checked })
-                  }
-                  className="h-4 w-4 text-green-600"
-                />
-                <span>Needs Review</span>
-              </label>
-              <input
-                type="text"
-                placeholder="Search..."
-                value={filter.search || ""}
-                onChange={(e) => setFilter({ ...filter, search: e.target.value })}
-                className="text-sm border-gray-300 rounded px-2 py-1"
-              />
-            </div>
-          </div>
-
-          <ProcessingTable
-            files={rows}
-            onUpdateResult={updateResult}
-            onRetryFile={() => {}}
-            showStatus
-            showOcr
-            showMatches
-            showFinal
-            onPreviewClick={(file) =>
-              setSelectedImage({
-                url: file.previewUrl || "",
-                name: file.filename,
-              })
+{step === 4 && (
+  <div className="space-y-4">
+    <div className="flex items-center justify-between">
+      <div className="flex items-center space-x-3">
+        <select
+          value={filter.status || ""}
+          onChange={(e) =>
+            setFilter({
+              ...filter,
+              status: (e.target.value as any) || undefined,
+            })
+          }
+          className="text-sm border-gray-300 rounded"
+        >
+          <option value="">All Statuses</option>
+          <option value="formatted">Formatted</option>
+          <option value="failed">Failed</option>
+        </select>
+        <label className="text-sm inline-flex items-center space-x-2">
+          <input
+            type="checkbox"
+            checked={filter.needsReview || false}
+            onChange={(e) =>
+              setFilter({ ...filter, needsReview: e.target.checked })
             }
+            className="h-4 w-4 text-green-600"
           />
+          <span>Needs Review</span>
+        </label>
+        <input
+          type="text"
+          placeholder="Search..."
+          value={filter.search || ""}
+          onChange={(e) => setFilter({ ...filter, search: e.target.value })}
+          className="text-sm border-gray-300 rounded px-2 py-1"
+        />
+      </div>
+    </div>
 
-          {(rows.some((r) => r.status === "formatted") || successMessage) && (
-            <div className="mt-4">
-              {!successMessage ? (
-                <button
-                  onClick={async () => {
-                    const selections = rows
-                      .filter((r) => r.status === "formatted")
-                      .map((r) => {
-                        const correction = r.result?.correctionStatus?.toLowerCase?.();
-                        const allowedReasons = [
-                          "search_failed",
-                          "ocr_failed",
-                          "manual_rejection",
-                          "others",
-                        ] as const;
+    <ProcessingTable
+      files={rows}
+      onUpdateResult={updateResult}
+      onRetryFile={() => {}}
+      showStatus
+      showOcr
+      showMatches
+      showFinal
+      onPreviewClick={(file) =>
+        setSelectedImage({
+          url: file.previewUrl || "",
+          name: file.filename,
+        })
+      }
+    />
 
-                        const nhr_reason = r.result?.needsReview
-                          ? allowedReasons.includes(correction as any)
-                            ? (correction as (typeof allowedReasons)[number])
-                            : "others"
-                          : undefined;
+    {(rows.some((r) => r.status === "formatted") || successMessage) && (
+      <div className="mt-4">
+        {!successMessage ? (
+          <button
+            onClick={async () => {
+              const selections = rows
+                .filter((r) => r.status === "formatted")
+                .map((r) => {
+                  const correction = r.result?.correctionStatus?.toLowerCase?.();
+                  const allowedReasons = [
+                    "search_failed",
+                    "ocr_failed",
+                    "manual_rejection",
+                    "others",
+                  ] as const;
 
-                        return {
-                          image: r.serverFilename || r.filename,
-                          selected_name:
-                            r.result?.finalOutput ||
-                            r.result?.selectedOption ||
-                            r.filename,
-                          target: (r.result?.needsReview
-                            ? "nhr"
-                            : "output") as "nhr" | "output",
-                          nhr_reason,
-                          gid: (r.result as any)?.validatedGid,
-                        };
-                      });
+                  const nhr_reason = r.result?.needsReview
+                    ? allowedReasons.includes(correction as any)
+                      ? (correction as (typeof allowedReasons)[number])
+                      : "others"
+                    : undefined;
 
-                    await uploadToDriveAndShopify(selections);
-                  }}
-                  disabled={globalUploading}
-                  className="w-full sm:w-auto inline-flex items-center px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
-                >
-                  {globalUploading ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : null}
-                  {globalUploading ? "Uploading..." : "Upload to Drive & Shopify"}
-                </button>
-              ) : (
-                <div className="flex flex-col space-y-2">
-                  <p className="text-green-700 text-sm">{successMessage}</p>
-                  <button
-                    onClick={() => reset()}
-                    className="w-full sm:w-auto inline-flex items-center px-3 py-1.5 rounded bg-green-600 text-white hover:bg-green-700 text-sm"
-                  >
-                    Process Another Batch
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+                  return {
+                    image: r.serverFilename || r.filename,
+                    selected_name:
+                      r.result?.finalOutput ||
+                      r.result?.selectedOption ||
+                      r.filename,
+                    target: (r.result?.needsReview
+                      ? "nhr"
+                      : "output") as "nhr" | "output", // ✅ fixed cast
+                    nhr_reason,
+                    gid: (r.result as any)?.validatedGid,
+                  };
+                });
+
+              await uploadToDriveAndShopify(selections);
+            }}
+            disabled={globalUploading}
+            className="w-full sm:w-auto inline-flex items-center px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+          >
+            {globalUploading ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : null}
+            {globalUploading ? "Uploading..." : "Upload to Drive & Shopify"}
+          </button>
+        ) : (
+          <div className="flex flex-col space-y-2">
+            <p className="text-green-700 text-sm">{successMessage}</p>
+            <button
+              onClick={() => reset()}
+              className="w-full sm:w-auto inline-flex items-center px-3 py-1.5 rounded bg-green-600 text-white hover:bg-green-700 text-sm"
+            >
+              Process Another Batch
+            </button>
+          </div>
+        )}
+      </div>
+    )}
+  </div>
+)}
+
 
       {/* Image Preview Modal */}
       {selectedImage && (
