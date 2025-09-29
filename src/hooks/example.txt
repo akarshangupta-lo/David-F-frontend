@@ -1,0 +1,96 @@
+// Add these interfaces at the top with your other interfaces
+interface CompareMatchItem {
+  image: string;
+  matches: {
+    orig: string;
+    final: string;
+    candidates: Array<{
+      gid?: string;
+      text: string;
+      score: number;
+      reason: string;
+    }>;
+    validated_gid?: string;
+    need_human_review?: boolean;
+    nhr?: boolean;
+  };
+}
+
+// Then replace your runCompare function with this version:
+const runCompare = useCallback(async () => {
+  setError(null);
+  setCompareLoading(true);
+  setCompareStarted(true);
+  const t0 = performance.now();
+  
+  try {
+    const ids = rows.filter(r => r.status !== 'failed').map(r => r.id);
+    if (ids.length === 0) throw new Error('No successful OCR items to compare');
+    
+    const rawResponse = await compareBatch(ids);
+    
+    // Handle both array and object responses
+    let results: CompareMatchItem[];
+    if (Array.isArray(rawResponse)) {
+      results = rawResponse;
+    } else if (rawResponse && Array.isArray(rawResponse.results)) {
+      results = rawResponse.results;
+    } else {
+      console.error('Unexpected compare response:', rawResponse);
+      throw new Error('Unexpected Compare response format');
+    }
+
+    const normalize = (name?: string) => (name || '').split(/[\\/]/).pop()!.toLowerCase();
+    
+    setRows(prev => prev.map(r => {
+      const rBase = r.baseName || normalize(r.filename) || normalize(r.serverFilename);
+      const found = results.find(x => normalize(x.image) === rBase || normalize(x.image) === normalize(r.serverFilename));
+      
+      if (!found) return r;
+
+      const sorted = [...(found.matches.candidates || [])].sort((a, b) => (Number(b.score) || 0) - (Number(a.score) || 0));
+      const topMatches = sorted.slice(0, 3).map(c => ({ 
+        option: c.text, 
+        score: Number(c.score) || 0, 
+        reason: c.reason 
+      }));
+      
+      const best = topMatches[0];
+      const needsReview = Boolean(found.matches.need_human_review || found.matches.nhr);
+      
+      let correctionStatus: ProcessingResult['correctionStatus'] = 'NHR';
+      if (needsReview) {
+        const ocrNoLabel = (found.matches.orig || '').toLowerCase().includes('no label');
+        correctionStatus = ocrNoLabel ? 'ocr_failed' : 'search_failed';
+      } else {
+        correctionStatus = 'approved';
+      }
+
+      const result: ProcessingResult = {
+        ...(r.result as ProcessingResult),
+        ocrText: found.matches.orig || r.result?.ocrText || '',
+        topMatches,
+        selectedOption: needsReview ? 'NHR' : (best?.option || 'NHR'),
+        finalOutput: needsReview ? '' : (found.matches.final || best?.option || (r.result?.finalOutput || '')),
+        matchConfidence: best?.score,
+        needsReview,
+        validatedGid: found.matches.validated_gid,
+        correctionStatus
+      };
+
+      return { ...r, status: 'formatted', result };
+    }));
+
+    setStep(4);
+    setCompareLocked(true);
+    setCompareMs(Math.max(0, Math.round(performance.now() - t0)));
+
+  } catch (error: unknown) {
+    const err = error as ApiError;
+    setError(err?.message || 'Compare failed, try again');
+    setCompareLocked(true);
+    setCompareMs(Math.max(0, Math.round(performance.now() - t0)));
+  } finally {
+    setCompareLoading(false);
+  }
+}, [rows]);
