@@ -1,3 +1,4 @@
+// wineOcrClient.ts
 // -----------------------------
 // Types
 // -----------------------------
@@ -76,8 +77,7 @@ async function postJson<T>(
     headers["Authorization"] = `Bearer ${
       (import.meta as any).env.VITE_ACCESS_TOKEN
     }`;
-  if (!(body instanceof FormData))
-    headers["Content-Type"] = "application/json";
+  if (!(body instanceof FormData)) headers["Content-Type"] = "application/json";
 
   let response: Response;
   try {
@@ -168,6 +168,7 @@ function normalizeUploadItems(
     raw?.files,
     raw?.data,
     raw?.results,
+    raw?.files_uploaded,
   ];
   for (const c of candidates) {
     const arr = asArray<any>(c);
@@ -216,6 +217,7 @@ export async function uploadImages(
   files.forEach((f) => form.append("files", f));
   let raw: any;
   try {
+    // Backend endpoint is POST /upload-images
     raw = await postJson<any>("/upload-images", form, timeoutMs);
   } catch (e) {
     console.error("Upload failed:", e);
@@ -245,20 +247,28 @@ export async function processOcr(
   ids: string[],
   timeoutMs = 300000
 ): Promise<OcrResponse> {
-  return postJson<OcrResponse>("/upload-ocr", { ids }, timeoutMs);
+  // Backend: POST /process-ocr
+  return postJson<OcrResponse>("/process-ocr", { ids }, timeoutMs);
 }
 
 export async function compareBatch(
   ids: string[],
   timeoutMs = 180000
 ): Promise<CompareResponse> {
-  return postJson<CompareResponse>("/compare", { ids }, timeoutMs);
+  // Backend: POST /compare-batch
+  return postJson<CompareResponse>("/compare-batch", { ids }, timeoutMs);
+}
+
+export async function getCompareResults(timeoutMs = 15000): Promise<any> {
+  // Backend: GET /get-compare-results
+  return getJson<any>("/get-compare-results", timeoutMs);
 }
 
 export async function exportCsv(
   payload: any,
   timeoutMs = 60000
 ): Promise<Blob> {
+  // Keep this pointing at /export if you later add an export endpoint server-side.
   const url = `${CLEAN_BASE}/export`;
   const response = await withTimeout(
     (signal) =>
@@ -270,34 +280,54 @@ export async function exportCsv(
       }),
     timeoutMs
   );
-  if (!response.ok)
-    throw new Error(`Export failed: HTTP ${response.status}`);
+  if (!response.ok) throw new Error(`Export failed: HTTP ${response.status}`);
   return response.blob();
 }
 
 // -----------------------------
-// New API Calls
+// New API Calls (match your FastAPI)
 // -----------------------------
 
-// Upload to Drive
+// Upload to Drive (backend endpoint: POST /upload-to-drive)
 export async function uploadToDriveApi(
   payload: any,
   timeoutMs = 60000
 ): Promise<any> {
-  return postJson<any>("/upload-drive", payload, timeoutMs);
+  return postJson<any>("/upload-to-drive", payload, timeoutMs);
 }
 
-// Upload to Shopify
+// Upload to Shopify (backend endpoint: POST /upload-to-shopify-batch)
 export async function uploadToShopifyBatch(
   payload: any,
   timeoutMs = 60000
 ): Promise<any> {
-  return postJson<any>("/upload-shopify", payload, timeoutMs);
+  return postJson<any>("/upload-to-shopify-batch", payload, timeoutMs);
 }
 
-// Refresh Shopify cache
+// Refresh Shopify cache (backend endpoint: POST /refresh-shopify-cache)
 export async function refreshShopifyCache(
   timeoutMs = 15000
 ): Promise<any> {
-  return getJson<any>("/refresh-shopify-cache", timeoutMs);
+  // Backend defines POST /refresh-shopify-cache — use GET or POST depending on your backend.
+  // Your backend has POST /refresh-shopify-cache, but it doesn't require a body. We'll call POST.
+  const url = `${CLEAN_BASE}/refresh-shopify-cache`;
+  let response: Response;
+  try {
+    response = await withTimeout(
+      (signal) =>
+        fetch(url, { method: "POST", mode: "cors", credentials: "omit", signal }),
+      timeoutMs
+    );
+  } catch (e: any) {
+    const errMsg = e?.name === "AbortError" ? "Request timed out" : (e?.message || 'Failed to fetch');
+    throw new Error(errMsg);
+  }
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  try {
+    return (await response.json()) as any;
+  } catch {
+    return (await response.text()) as any;
+  }
 }
