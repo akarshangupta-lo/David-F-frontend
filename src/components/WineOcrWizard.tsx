@@ -400,38 +400,39 @@ export const WineOcrWizard: React.FC = () => {
             }
           />
 
-          {rows.some((r) => r.status === 'formatted') && (
+          { /* Show upload controls if there are formatted rows OR we already have a successMessage */ }
+          {(rows.some((r) => r.status === 'formatted') || successMessage) && (
             <div className="mt-4">
               {/* Upload to Drive & Shopify */}
               {!successMessage ? (
                 <button
                   onClick={async () => {
                     const selections = rows
-  .filter((r) => r.status === "formatted")
-  .map((r) => {
-    const correction = r.result?.correctionStatus?.toLowerCase?.();
-    const allowedReasons = [
-      "search_failed",
-      "ocr_failed",
-      "manual_rejection",
-      "others",
-    ] as const;
+                      .filter((r) => r.status === 'formatted')
+                      .map((r) => {
+                        const correction = r.result?.correctionStatus?.toLowerCase?.();
+                        const allowedReasons = [
+                          'search_failed',
+                          'ocr_failed',
+                          'manual_rejection',
+                          'others',
+                        ] as const;
 
-    const nhr_reason = r.result?.needsReview
-      ? (allowedReasons.includes(correction as any)
-          ? (correction as typeof allowedReasons[number])
-          : "others")
-      : undefined;
+                        const nhr_reason = r.result?.needsReview
+                          ? (allowedReasons.includes(correction as any)
+                              ? (correction as typeof allowedReasons[number])
+                              : 'others')
+                          : undefined;
 
-    return {
-      image: r.serverFilename || r.filename,
-      selected_name:
-        r.result?.finalOutput || r.result?.selectedOption || r.filename,
-      target: (r.result?.needsReview ? "nhr" : "output") as "nhr" | "output",
-      nhr_reason,
-      gid: (r.result as any)?.validatedGid,
-    };
-  });
+                        return {
+                          image: r.serverFilename || r.filename,
+                          selected_name:
+                            r.result?.finalOutput || r.result?.selectedOption || r.filename,
+                          target: (r.result?.needsReview ? 'nhr' : 'output') as 'nhr' | 'output',
+                          nhr_reason,
+                          gid: (r.result as any)?.validatedGid,
+                        };
+                      });
 
                     await uploadToDriveAndShopify(selections);
                   }}
@@ -441,9 +442,7 @@ export const WineOcrWizard: React.FC = () => {
                   {globalUploading ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   ) : null}
-                  {globalUploading
-                    ? 'Uploading...'
-                    : 'Upload to Drive & Shopify'}
+                  {globalUploading ? 'Uploading...' : 'Upload to Drive & Shopify'}
                 </button>
               ) : (
                 <div className="flex flex-col space-y-2">

@@ -178,29 +178,6 @@ export const useWineOcr = () => {
       setOcrLocked(false);
       setCompareLocked(false);
 
-      // Upload to Drive folders (input) if drive linked - best-effort, not blocking
-      if (drive.linked) {
-        for (const row of newRows) {
-          if (!row.originalFile) continue;
-          try {
-            const uploadResponse = await uploadToDrive([{
-              image: row.filename,
-              selected_name: row.filename, // keep original name
-              target: 'output'
-            }]);
-            if (uploadResponse.success && uploadResponse.drive_file) {
-              setRows(prev => prev.map(r => r.id === row.id ? ({
-                ...r,
-                driveIds: { ...r.driveIds, input: uploadResponse.drive_file?.id },
-                driveLinks: { ...r.driveLinks, input: uploadResponse.drive_file?.webViewLink }
-              }) : r));
-            }
-          } catch (e) {
-            console.error('Drive upload failed for', row.filename, e);
-          }
-        }
-      }
-
       setStep(3);
     } catch (error: unknown) {
       const err = error as ApiError;
@@ -407,7 +384,7 @@ export const useWineOcr = () => {
     }
   }, [rows, uploadToDrive]);
 
-  
+
 // ----------------------
 // Upload to Drive & Shopify (batch)
 // ----------------------
