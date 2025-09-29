@@ -52,10 +52,8 @@ export const WineOcrWizard: React.FC = () => {
     handleUpload,
     runOcr,
     runCompare,
-    uploadResultToDrive,
     updateResult,
     cancel,
-    exportCsvData,
     uploadToDriveAndShopify,
     refreshShopify,
     reset,
@@ -294,7 +292,6 @@ export const WineOcrWizard: React.FC = () => {
             files={rows}
             onUpdateResult={updateResult}
             onRetryFile={() => {}}
-            onUploadToDrive={uploadResultToDrive}
             showStatus={false}
             showOcr={ocrStarted}
             showMatches={compareStarted}
@@ -346,14 +343,6 @@ export const WineOcrWizard: React.FC = () => {
                 onChange={(e) => setFilter({ ...filter, search: e.target.value })}
                 className="text-sm border-gray-300 rounded px-2 py-1"
               />
-            </div>
-            <div className="space-x-2">
-              <button
-                onClick={exportCsvData}
-                className="px-3 py-2 rounded border border-gray-300 text-sm"
-              >
-                Export CSV
-              </button>
             </div>
           </div>
 

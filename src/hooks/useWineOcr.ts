@@ -4,7 +4,6 @@ import {
   uploadImages,
   processOcr,
   compareBatch,
-  exportCsv,
   uploadToDriveApi,
   uploadToShopifyBatch,
   refreshShopifyCache,
@@ -90,6 +89,8 @@ export const useWineOcr = () => {
   const [healthStatus, setHealthStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
+
   const cancellationRef = useRef<{ cancelled: boolean }>({ cancelled: false });
   const [filter, setFilter] = useState<FilterState>({});
   const { state: drive, uploadToDrive } = useDrive();
@@ -111,6 +112,7 @@ export const useWineOcr = () => {
     setCompareMs(null);
     setSuccessMessage(null);
     setRefreshResult(null);
+    setUploadProgress({ done: 0, total: 0 });
     cancellationRef.current.cancelled = false;
   }, []);
 
@@ -146,7 +148,6 @@ export const useWineOcr = () => {
       const list = Array.isArray(uploads) ? uploads : [];
       if (list.length === 0) throw new Error('Upload did not return any items');
 
-      // robust mapping: normalize basenames to align rows and responses
       const normalize = (name?: string) => (name || '').split(/[\\/]/).pop()!.toLowerCase();
       const fileByBase = new Map<string, File>();
       files.forEach(f => fileByBase.set(normalize(f.name), f));
@@ -172,7 +173,6 @@ export const useWineOcr = () => {
 
       setRows(prev => [...prev, ...newRows]);
 
-      // reset flags for new session
       setOcrStarted(false);
       setCompareStarted(false);
       setOcrLocked(false);
@@ -321,137 +321,91 @@ export const useWineOcr = () => {
   }, [rows]);
 
   // ----------------------
-  // Upload a single result to Drive (existing single-file function)
+  // Upload to Drive & Shopify (concurrent batches)
   // ----------------------
-  const uploadResultToDrive = useCallback(async (fileId: string) => {
-    const row = rows.find(r => r.id === fileId);
-    if (!row) {
-      setError('Upload failed: File not found');
-      return false;
-    }
-    if (!row.result) {
-      setError('Upload failed: File has no processing result');
-      return false;
-    }
-
-    try {
+  const uploadToDriveAndShopify = useCallback(
+    async (selections: DriveUploadSelection[], concurrency = 5) => {
+      setGlobalUploading(true);
       setError(null);
-      const selectedName = row.result.finalOutput || row.result.selectedOption;
-      const safeName = (selectedName || 'unnamed')
-        .replace(/[^a-z0-9]/gi, '_')
-        .replace(/_+/g, '_')
-        .replace(/^_|_$/g, '') + '.jpg';
+      setSuccessMessage(null);
+      setUploadProgress({ done: 0, total: selections.length });
 
-      const isNHR = row.result.correctionStatus === 'NHR' || row.result.needsReview;
-      const selection: DriveUploadSelection = {
-        image: row.originalBaseName || row.filename,
-        selected_name: safeName,
-        target: isNHR ? 'nhr' : 'output',
-      };
+      let done = 0;
+      let shopifyCount = 0;
 
-      if (isNHR) {
-        const nhrReason = (row.result.correctionStatus || '').toLowerCase();
-        selection.nhr_reason =
-          ['search_failed', 'ocr_failed', 'manual_rejection', 'others'].includes(nhrReason)
-            ? nhrReason as DriveUploadSelection['nhr_reason']
-            : 'others';
-      }
+      try {
+        const userId = localStorage.getItem("wine_ocr_user_id") || "me";
 
-      const uploadResponse = await uploadToDrive([selection]);
-      if (uploadResponse.success) {
-        setRows(prev => prev.map(r =>
-          r.id === fileId
-            ? {
-              ...r,
-              status: 'uploaded_to_drive',
-              driveIds: { ...r.driveIds, target: uploadResponse.drive_file?.id },
-              driveLinks: { ...r.driveLinks, target: uploadResponse.drive_file?.webViewLink }
-            }
-            : r
-        ));
-        return true;
-      }
-      if (uploadResponse.error) {
-        setError(`Drive upload failed: ${uploadResponse.error}`);
-        return false;
-      }
-      return true;
-    } catch (error: unknown) {
-      const err = error as ApiError;
-      console.error('Drive upload error:', err);
-      setError(err.message || 'Drive upload failed');
-      return false;
-    }
-  }, [rows, uploadToDrive]);
+        const chunks: DriveUploadSelection[][] = [];
+        for (let i = 0; i < selections.length; i += concurrency) {
+          chunks.push(selections.slice(i, i + concurrency));
+        }
 
+        for (const chunk of chunks) {
+          if (cancellationRef.current.cancelled) break;
 
-// ----------------------
-// Upload to Drive & Shopify (batch)
-// ----------------------
-const uploadToDriveAndShopify = useCallback(
-  async (selections: DriveUploadSelection[]) => {
-    setGlobalUploading(true);
-    setError(null);
-    setSuccessMessage(null);
+          // Drive
+          const drivePayload = { user_id: userId, selections: chunk };
+          const driveRes = await uploadToDriveApi(drivePayload);
 
-    try {
-      const userId = localStorage.getItem("wine_ocr_user_id") || "me";
+          // Shopify
+          const shopifySelections = chunk.map((s) => ({
+            image: s.image,
+            selected_name: s.selected_name,
+            gid: (s as any).gid,
+          }));
+          const shopRes = await uploadToShopifyBatch(shopifySelections);
+          shopifyCount += Array.isArray(shopRes?.results) ? shopRes.results.length : shopRes?.count || shopifySelections.length;
 
-      // Drive
-      const drivePayload = { user_id: userId, selections };
-      const driveRes = await uploadToDriveApi(drivePayload);
-
-      // Shopify
-      const shopifySelections = selections.map((s) => ({
-        image: s.image,
-        selected_name: s.selected_name,
-        gid: (s as any).gid,
-      }));
-      const shopRes = await uploadToShopifyBatch(shopifySelections);
-
-      // ✅ Success if both return 200 OK
-      setSuccessMessage(
-        `✅ Successfully uploaded ${selections.length} item(s) to Drive & Shopify`
-      );
-
-      // Update rows with Drive info if available
-      if (driveRes?.files_organized) {
-        const mapping = driveRes.files_organized;
-        setRows((prev) =>
-          prev.map((r) => {
-            const found = mapping.find(
-              (m: any) =>
-                m.ocr_filename === r.serverFilename || m.filename === r.filename
+          // Update rows with Drive info
+          if (driveRes?.files_organized) {
+            const mapping = driveRes.files_organized;
+            setRows((prev) =>
+              prev.map((r) => {
+                const found = mapping.find(
+                  (m: any) =>
+                    m.ocr_filename === r.serverFilename || m.filename === r.filename
+                );
+                if (!found) return r;
+                return {
+                  ...r,
+                  status: "uploaded_to_drive",
+                  driveIds: {
+                    ...r.driveIds,
+                    target:
+                      driveRes.upload_result?.drive_file_id || r.driveIds?.target,
+                  },
+                  driveLinks: {
+                    ...r.driveLinks,
+                    target:
+                      driveRes.upload_result?.webViewLink || r.driveLinks?.target,
+                  },
+                };
+              })
             );
-            if (!found) return r;
-            return {
-              ...r,
-              status: "uploaded_to_drive",
-              driveIds: {
-                ...r.driveIds,
-                target: driveRes.upload_result?.drive_file_id || r.driveIds?.target,
-              },
-              driveLinks: {
-                ...r.driveLinks,
-                target: driveRes.upload_result?.webViewLink || r.driveLinks?.target,
-              },
-            };
-          })
-        );
-      }
-    } catch (err: any) {
-      console.error("Upload error:", err);
-      setError(err?.message || "❌ Upload to Drive/Shopify failed");
-    } finally {
-      setGlobalUploading(false);
-    }
-  },
-  []
-);
+          }
 
+          done += chunk.length;
+          setUploadProgress({ done, total: selections.length });
+        }
+
+        setSuccessMessage(
+          `✅ Uploaded ${done} item(s) → Drive and ${shopifyCount} item(s) → Shopify`
+        );
+        return { shopifyCount, driveCount: done };
+      } catch (err: any) {
+        console.error("Upload error:", err);
+        setError(err?.message || "❌ Upload to Drive/Shopify failed");
+        return { shopifyCount: 0, driveCount: 0 };
+      } finally {
+        setGlobalUploading(false);
+      }
+    },
+    []
+  );
 
   // ----------------------
-  // New: Refresh Shopify Cache
+  // Refresh Shopify Cache
   // ----------------------
   const refreshShopify = useCallback(async () => {
     setRefreshing(true);
@@ -459,7 +413,6 @@ const uploadToDriveAndShopify = useCallback(
     setRefreshResult(null);
     try {
       const res = await refreshShopifyCache();
-      // res may be { message, cache_file, ... } or similar
       if (res && typeof res === 'object') {
         const msg = res.message || JSON.stringify(res);
         setRefreshResult(msg);
@@ -481,36 +434,6 @@ const uploadToDriveAndShopify = useCallback(
   }, []);
 
   const clear = useCallback(() => setRows([]), []);
-
-  // ----------------------
-  // Export CSV (keeps previous behavior)
-  // ----------------------
-  const exportCsvData = useCallback(() => {
-    const headers = ['Filename','OCR Text','Selected Match','Top3','Confidence','Needs Review','Validated GID'];
-    const lines = [headers.join(',')];
-    rows.forEach(r => {
-      const top3 = (r.result?.topMatches || []).slice(0,3).map(m => `${m.option} (${m.score.toFixed(2)})`).join(' | ');
-      const row = [
-        r.filename,
-        JSON.stringify(r.result?.ocrText || ''),
-        JSON.stringify(r.result?.selectedOption || ''),
-        JSON.stringify(top3),
-        String(r.result?.matchConfidence ?? ''),
-        (r.result?.needsReview ? 'Yes' : 'No'),
-        JSON.stringify(r.result?.validatedGid || '')
-      ];
-      lines.push(row.join(','));
-    });
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'wine-ocr-results.csv';
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
-  }, [rows]);
 
   // ----------------------
   // Filtering and derived flags
@@ -561,6 +484,7 @@ const uploadToDriveAndShopify = useCallback(
     error,
     filter,
     drive,
+    uploadProgress,
     // actions
     setStep,
     setRows,
@@ -571,11 +495,9 @@ const uploadToDriveAndShopify = useCallback(
     handleUpload,
     runOcr,
     runCompare,
-    uploadResultToDrive,
     uploadToDriveAndShopify,
     refreshShopify,
     updateResult,
-    clear,
-    exportCsvData,
+    clear
   };
 };

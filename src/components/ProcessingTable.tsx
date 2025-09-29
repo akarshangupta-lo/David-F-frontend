@@ -3,7 +3,6 @@ import {
   CheckCircle, 
   Clock, 
   AlertTriangle, 
-  RefreshCw, 
   Eye,
   Edit3,
   ChevronDown,
@@ -20,8 +19,7 @@ interface ProcessingTableProps {
   showMatches?: boolean;
   showFinal?: boolean;
   onPreviewClick?: (file: ProcessingTableRow) => void;
-
-   onUploadToDrive?: (fileId: string) => Promise<boolean>;
+  onUploadToDrive?: (fileId: string) => Promise<boolean>;
 }
 
 const StatusIcon: React.FC<{ status: string; error?: string }> = ({ status, error: _error }) => {
@@ -57,7 +55,7 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
     { label: 'Unknown', className: 'bg-gray-100 text-gray-800' };
 
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${config.className}`}>
+    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium ${config.className}`}>
       {config.label}
     </span>
   );
@@ -74,7 +72,6 @@ const WineMatchSelector: React.FC<{
 }> = ({ matches, selectedOption, correctionStatus, onSelectionChange, onCorrectionStatusChange, name, needsReview }) => {
   const [expanded, setExpanded] = React.useState(false);
 
-  // Preselect highest score if nothing selected yet
   React.useEffect(() => {
     if (!selectedOption || selectedOption === '') {
       if (needsReview) {
@@ -94,7 +91,6 @@ const WineMatchSelector: React.FC<{
 
   return (
     <div className="space-y-3">
-      {/* Wine Matches */}
       <div className="space-y-2">
         {matches.map((match, index) => (
           <div key={index} className="border rounded-lg p-3 hover:bg-gray-50">
@@ -109,7 +105,7 @@ const WineMatchSelector: React.FC<{
               />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium text-gray-900">{match.option}</p>
+                  <p className="text-base font-medium text-gray-900">{match.option}</p>
                   <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
                     Score: {isNaN(match.score as any) ? '—' : match.score.toFixed(2)}
                   </span>
@@ -132,7 +128,6 @@ const WineMatchSelector: React.FC<{
         ))}
       </div>
 
-      {/* NHR Option */}
       <div className="border border-orange-200 rounded-lg p-3 bg-orange-50">
         <label className="flex items-start space-x-3 cursor-pointer">
           <input
@@ -188,29 +183,29 @@ export const ProcessingTable: React.FC<ProcessingTableProps> = ({
 
   return (
     <div className="bg-white shadow-sm border border-gray-200 rounded-lg overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+      <div className="overflow-x-auto max-h-[70vh]">
+        <table className="min-w-full divide-y divide-gray-200 text-base">
+          <thead className="bg-gray-50 sticky top-0 z-10">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-5 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">
                 File
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-5 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">
                 Preview
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-5 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">
                 Status
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-5 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">
                 OCR Text
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-5 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">
                 Wine Matches
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-5 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">
                 Final Output
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-5 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider">
                 Actions
               </th>
             </tr>
@@ -218,30 +213,30 @@ export const ProcessingTable: React.FC<ProcessingTableProps> = ({
           <tbody className="bg-white divide-y divide-gray-200">
             {files.map((file) => (
               <tr key={file.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className="px-6 py-5 whitespace-nowrap">
                   <div className="flex items-center space-x-2">
                     <StatusIcon status={file.status} error={file.errorMessage} />
                     <div>
-                      <p className="text-sm font-medium text-gray-900">{file.filename}</p>
+                      <p className="text-base font-medium text-gray-900">{file.filename}</p>
                       <p className="text-xs text-gray-500">
                         {new Date(file.createdAt).toLocaleTimeString()}
                       </p>
                     </div>
                   </div>
                 </td>
-               <td className="px-6 py-4 whitespace-nowrap">
-                 {file.previewUrl ? (
-                   <img
-                     src={file.previewUrl}
-                     alt={file.filename}
-                     className="h-12 w-12 object-cover rounded border cursor-pointer"
-                     onClick={() => onPreviewClick && onPreviewClick(file)}
-                   />
-                 ) : (
-                   <span className="text-xs text-gray-400">—</span>
-                 )}
-               </td>
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className="px-6 py-5 whitespace-nowrap">
+                  {file.previewUrl ? (
+                    <img
+                      src={file.previewUrl}
+                      alt={file.filename}
+                      className="h-14 w-14 object-cover rounded border cursor-pointer"
+                      onClick={() => onPreviewClick && onPreviewClick(file)}
+                    />
+                  ) : (
+                    <span className="text-xs text-gray-400">—</span>
+                  )}
+                </td>
+                <td className="px-6 py-5 whitespace-nowrap">
                   {showStatus ? (
                     <>
                       <StatusBadge status={file.status} />
@@ -254,10 +249,10 @@ export const ProcessingTable: React.FC<ProcessingTableProps> = ({
                   )}
                 </td>
 
-                <td className="px-6 py-4">
-                  <div className="max-w-xs">
+                <td className="px-6 py-5">
+                  <div className="max-w-sm">
                     {showOcr && file.result?.ocrText ? (
-                      <div className="text-sm text-gray-900 whitespace-pre-wrap max-h-40 overflow-auto border border-gray-200 rounded-md bg-gray-50 p-2">
+                      <div className="text-sm text-gray-900 whitespace-pre-wrap max-h-60 overflow-auto border border-gray-200 rounded-md bg-gray-50 p-2">
                         {file.result.ocrText}
                       </div>
                     ) : (
@@ -266,8 +261,8 @@ export const ProcessingTable: React.FC<ProcessingTableProps> = ({
                   </div>
                 </td>
 
-                <td className="px-6 py-4">
-                  <div className="max-w-sm">
+                <td className="px-6 py-5">
+                  <div className="max-w-md">
                     {showMatches && file.result?.topMatches && file.result.topMatches.length > 0 ? (
                       <WineMatchSelector
                         matches={file.result.topMatches}
@@ -284,15 +279,15 @@ export const ProcessingTable: React.FC<ProcessingTableProps> = ({
                   </div>
                 </td>
 
-                <td className="px-6 py-4">
-                  <div className="max-w-xs">
-                    <div className="text-sm text-gray-900 whitespace-pre-wrap max-h-32 overflow-auto border border-gray-200 rounded-md bg-gray-50 p-2">
+                <td className="px-6 py-5">
+                  <div className="max-w-sm">
+                    <div className="text-sm text-gray-900 whitespace-pre-wrap max-h-60 overflow-auto border border-gray-200 rounded-md bg-gray-50 p-2">
                       {showFinal ? (file.result?.finalOutput || '') : ''}
                     </div>
                   </div>
                 </td>
 
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className="px-6 py-5 whitespace-nowrap">
                   <div className="flex space-x-2">
                     {file.status === 'failed' && (
                       <button
