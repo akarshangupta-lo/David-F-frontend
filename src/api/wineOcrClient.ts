@@ -216,7 +216,7 @@ export async function uploadImages(
   files.forEach((f) => form.append("files", f));
   let raw: any;
   try {
-    raw = await postJson<any>("/upload", form, timeoutMs);
+    raw = await postJson<any>("/upload-images", form, timeoutMs);
   } catch (e) {
     console.error("Upload failed:", e);
     throw e;
