@@ -1,6 +1,15 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ProcessingTableRow, ProcessingResult } from '../types';
-import { uploadImages, processOcr, compareBatch, healthCheck } from '../api/wineOcrClient';
+import {
+  uploadImages,
+  processOcr,
+  compareBatch,
+  exportCsv,
+  uploadToDriveApi,
+  uploadToShopifyBatch,
+  refreshShopifyCache,
+  healthCheck
+} from "../api/wineOcrClient";
 import { useDrive } from './useDrive';
 import { DriveUploadSelection } from '../types/drive';
 
@@ -63,6 +72,11 @@ export const useWineOcr = () => {
   const [step, setStep] = useState<WizardStep>(2);
   const [rows, setRows] = useState<ProcessingTableRow[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [globalUploading, setGlobalUploading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshResult, setRefreshResult] = useState<string | null>(null);
+
   const [ocrLoading, setOcrLoading] = useState(false);
   const [compareLoading, setCompareLoading] = useState(false);
   const [ocrStarted, setOcrStarted] = useState(false);
@@ -75,11 +89,15 @@ export const useWineOcr = () => {
   const [healthLoading, setHealthLoading] = useState(false);
   const [healthStatus, setHealthStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
   const cancellationRef = useRef<{ cancelled: boolean }>({ cancelled: false });
   const [filter, setFilter] = useState<FilterState>({});
   const { state: drive, uploadToDrive } = useDrive();
 
-  const reset = useCallback(() => {
+  // ----------------------
+  // Basic controls
+  // ----------------------
+  const resetBatch = useCallback(() => {
     setStep(2);
     setRows([]);
     setError(null);
@@ -91,6 +109,8 @@ export const useWineOcr = () => {
     setUploadMs(null);
     setOcrMs(null);
     setCompareMs(null);
+    setSuccessMessage(null);
+    setRefreshResult(null);
     cancellationRef.current.cancelled = false;
   }, []);
 
@@ -114,6 +134,9 @@ export const useWineOcr = () => {
     }
   }, []);
 
+  // ----------------------
+  // Upload images (to backend upload endpoint)
+  // ----------------------
   const handleUpload = useCallback(async (files: File[]) => {
     setError(null);
     setUploading(true);
@@ -123,10 +146,10 @@ export const useWineOcr = () => {
       const list = Array.isArray(uploads) ? uploads : [];
       if (list.length === 0) throw new Error('Upload did not return any items');
 
+      // robust mapping: normalize basenames to align rows and responses
       const normalize = (name?: string) => (name || '').split(/[\\/]/).pop()!.toLowerCase();
       const fileByBase = new Map<string, File>();
       files.forEach(f => fileByBase.set(normalize(f.name), f));
-
       const newRows: ProcessingTableRow[] = list.map((u, idx) => {
         const base = normalize(u.filename);
         const srcFile = fileByBase.get(base) || files[idx] || files[0];
@@ -149,22 +172,22 @@ export const useWineOcr = () => {
 
       setRows(prev => [...prev, ...newRows]);
 
+      // reset flags for new session
       setOcrStarted(false);
       setCompareStarted(false);
       setOcrLocked(false);
       setCompareLocked(false);
 
+      // Upload to Drive folders (input) if drive linked - best-effort, not blocking
       if (drive.linked) {
         for (const row of newRows) {
           if (!row.originalFile) continue;
           try {
-            console.log('Uploading to drive folders...');
             const uploadResponse = await uploadToDrive([{
               image: row.filename,
-              selected_name: row.filename,
+              selected_name: row.filename, // keep original name
               target: 'output'
             }]);
-
             if (uploadResponse.success && uploadResponse.drive_file) {
               setRows(prev => prev.map(r => r.id === row.id ? ({
                 ...r,
@@ -177,6 +200,7 @@ export const useWineOcr = () => {
           }
         }
       }
+
       setStep(3);
     } catch (error: unknown) {
       const err = error as ApiError;
@@ -187,6 +211,9 @@ export const useWineOcr = () => {
     }
   }, [drive.linked, uploadToDrive]);
 
+  // ----------------------
+  // OCR processing
+  // ----------------------
   const runOcr = useCallback(async () => {
     setError(null);
     setOcrLoading(true);
@@ -252,12 +279,14 @@ export const useWineOcr = () => {
     }
   }, [rows]);
 
+  // ----------------------
+  // Compare / Match
+  // ----------------------
   const runCompare = useCallback(async () => {
     setError(null);
     setCompareLoading(true);
     setCompareStarted(true);
     const t0 = performance.now();
-
     try {
       const ids = rows.filter(r => r.status !== 'failed').map(r => r.id);
       if (ids.length === 0) throw new Error('No successful OCR items to compare');
@@ -271,7 +300,6 @@ export const useWineOcr = () => {
           const rBase = r.baseName || normalize(r.filename) || normalize(r.serverFilename);
           const found = results.find(x => normalize(x.image) === rBase || normalize(x.image) === normalize(r.serverFilename));
           if (!found) return r;
-
           const sorted = [...(found.matches.candidates || [])].sort((a, b) => (Number(b.score) || 0) - (Number(a.score) || 0));
           const topMatches = sorted.slice(0, 3).map(c => ({ option: c.text, score: Number(c.score) || 0, reason: c.reason }));
           const best = topMatches[0];
@@ -283,7 +311,6 @@ export const useWineOcr = () => {
           } else {
             correctionStatus = 'approved';
           }
-
           const result: ProcessingResult = {
             ...(r.result as ProcessingResult),
             ocrText: found.matches.orig || r.result?.ocrText || '',
@@ -316,6 +343,9 @@ export const useWineOcr = () => {
     }
   }, [rows]);
 
+  // ----------------------
+  // Upload a single result to Drive (existing single-file function)
+  // ----------------------
   const uploadResultToDrive = useCallback(async (fileId: string) => {
     const row = rows.find(r => r.id === fileId);
     if (!row) {
@@ -328,11 +358,9 @@ export const useWineOcr = () => {
     }
 
     try {
-      console.log('Starting drive upload for:', { fileId, status: row.status });
       setError(null);
-
       const selectedName = row.result.finalOutput || row.result.selectedOption;
-      const safeName = selectedName
+      const safeName = (selectedName || 'unnamed')
         .replace(/[^a-z0-9]/gi, '_')
         .replace(/_+/g, '_')
         .replace(/^_|_$/g, '') + '.jpg';
@@ -345,7 +373,7 @@ export const useWineOcr = () => {
       };
 
       if (isNHR) {
-        const nhrReason = row.result.correctionStatus.toLowerCase();
+        const nhrReason = (row.result.correctionStatus || '').toLowerCase();
         selection.nhr_reason =
           ['search_failed', 'ocr_failed', 'manual_rejection', 'others'].includes(nhrReason)
             ? nhrReason as DriveUploadSelection['nhr_reason']
@@ -353,7 +381,6 @@ export const useWineOcr = () => {
       }
 
       const uploadResponse = await uploadToDrive([selection]);
-
       if (uploadResponse.success) {
         setRows(prev => prev.map(r =>
           r.id === fileId
@@ -367,12 +394,10 @@ export const useWineOcr = () => {
         ));
         return true;
       }
-
       if (uploadResponse.error) {
         setError(`Drive upload failed: ${uploadResponse.error}`);
         return false;
       }
-
       return true;
     } catch (error: unknown) {
       const err = error as ApiError;
@@ -382,24 +407,90 @@ export const useWineOcr = () => {
     }
   }, [rows, uploadToDrive]);
 
+  // ----------------------
+  // New: Upload to Drive & Shopify (batch)
+  // ----------------------
+  const uploadToDriveAndShopify = useCallback(async (selections: DriveUploadSelection[]) => {
+    setGlobalUploading(true);
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      const userId = localStorage.getItem('wine_ocr_user_id') || 'me';
+
+      // Drive payload shape matches backend
+      const drivePayload = { user_id: userId, selections };
+      const driveRes = await uploadToDriveApi(drivePayload);
+      // Shopify expects array of selections (your backend expects selections: List[dict])
+      const shopifySelections = selections.map(s => ({
+        image: s.image,
+        selected_name: s.selected_name,
+        gid: (s as any).gid // if you have gid in selection; otherwise backends may accept missing gid
+      }));
+      const shopRes = await uploadToShopifyBatch(shopifySelections);
+
+      setSuccessMessage(`Successfully uploaded ${selections.length} items to Drive and Shopify`);
+      // Optionally process driveRes / shopRes to update rows with links/ids
+      // If driveRes contains mapping, update rows accordingly (best-effort):
+      try {
+        if (driveRes?.files_organized) {
+          const mapping = driveRes.files_organized;
+          setRows(prev => prev.map(r => {
+            const found = mapping.find((m: any) => (m.ocr_filename === r.serverFilename || m.filename === r.filename));
+            if (!found) return r;
+            return {
+              ...r,
+              status: 'uploaded_to_drive',
+              driveIds: { ...r.driveIds, target: driveRes.upload_result?.drive_file_id || r.driveIds?.target },
+              driveLinks: { ...r.driveLinks, target: driveRes.upload_result?.webViewLink || r.driveLinks?.target }
+            };
+          }));
+        }
+      } catch (e) {
+        console.warn('Could not update rows from drive response', e);
+      }
+
+    } catch (error: any) {
+      setError(error?.message || 'Upload to Drive/Shopify failed');
+    } finally {
+      setGlobalUploading(false);
+    }
+  }, []);
+
+  // ----------------------
+  // New: Refresh Shopify Cache
+  // ----------------------
+  const refreshShopify = useCallback(async () => {
+    setRefreshing(true);
+    setError(null);
+    setRefreshResult(null);
+    try {
+      const res = await refreshShopifyCache();
+      // res may be { message, cache_file, ... } or similar
+      if (res && typeof res === 'object') {
+        const msg = res.message || JSON.stringify(res);
+        setRefreshResult(msg);
+      } else {
+        setRefreshResult(String(res));
+      }
+    } catch (error: any) {
+      setError(error?.message || 'Refresh failed');
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
+  // ----------------------
+  // Update result
+  // ----------------------
   const updateResult = useCallback((fileId: string, updates: Partial<ProcessingResult>) => {
     setRows(prev => prev.map(r => r.id === fileId && r.result ? ({ ...r, result: { ...r.result, ...updates } }) : r));
   }, []);
 
   const clear = useCallback(() => setRows([]), []);
 
-  const filteredRows = useMemo(() => {
-    return rows.filter(r => {
-      if (filter.status && r.status !== filter.status) return false;
-      if (filter.needsReview !== undefined && (r.result?.needsReview || false) !== filter.needsReview) return false;
-      if (filter.search) {
-        const text = `${r.filename} ${r.result?.ocrText || ''} ${r.result?.finalOutput || ''}`.toLowerCase();
-        if (!text.includes(filter.search.toLowerCase())) return false;
-      }
-      return true;
-    });
-  }, [rows, filter]);
-
+  // ----------------------
+  // Export CSV (keeps previous behavior)
+  // ----------------------
   const exportCsvData = useCallback(() => {
     const headers = ['Filename','OCR Text','Selected Match','Top3','Confidence','Needs Review','Validated GID'];
     const lines = [headers.join(',')];
@@ -427,16 +518,39 @@ export const useWineOcr = () => {
     document.body.removeChild(a);
   }, [rows]);
 
+  // ----------------------
+  // Filtering and derived flags
+  // ----------------------
+  const filteredRows = useMemo(() => {
+    return rows.filter(r => {
+      if (filter.status && r.status !== filter.status) return false;
+      if (filter.needsReview !== undefined && (r.result?.needsReview || false) !== filter.needsReview) return false;
+      if (filter.search) {
+        const text = `${r.filename} ${r.result?.ocrText || ''} ${r.result?.finalOutput || ''}`.toLowerCase();
+        if (!text.includes(filter.search.toLowerCase())) return false;
+      }
+      return true;
+    });
+  }, [rows, filter]);
+
   const canRunCompare = useMemo(() => {
     const anyOcrDone = rows.some(r => r.status === 'ocr_done' || r.status === 'formatted' || r.status === 'uploaded_to_drive');
     return anyOcrDone && !compareLocked;
   }, [rows, compareLocked]);
 
+  // ----------------------
+  // Returned API
+  // ----------------------
   return {
+    // state
     step,
     rows: filteredRows,
     allRows: rows,
     uploading,
+    globalUploading,
+    successMessage,
+    refreshing,
+    refreshResult,
     processing: ocrLoading || compareLoading,
     ocrLoading,
     compareLoading,
@@ -444,6 +558,7 @@ export const useWineOcr = () => {
     compareStarted,
     ocrLocked,
     compareLocked,
+    canRunCompare,
     uploadMs,
     ocrMs,
     compareMs,
@@ -452,19 +567,21 @@ export const useWineOcr = () => {
     error,
     filter,
     drive,
+    // actions
     setStep,
     setRows,
     setFilter,
-    reset,
+    reset: resetBatch,
     cancel,
     checkHealth,
     handleUpload,
     runOcr,
     runCompare,
     uploadResultToDrive,
+    uploadToDriveAndShopify,
+    refreshShopify,
     updateResult,
     clear,
     exportCsvData,
-    canRunCompare
   };
 };

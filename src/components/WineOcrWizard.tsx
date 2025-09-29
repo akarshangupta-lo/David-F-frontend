@@ -1,23 +1,559 @@
-import React, { useState } from 'react';
-import { AlertCircle, Loader2, Play, StopCircle, HardDrive, X } from 'lucide-react';
-import { FileUploadZone } from './FileUploadZone';
-import { ProcessingTable } from './ProcessingTable';
-import { useWineOcr, TIME_PER_IMAGE_SECONDS, formatTime } from '../hooks/useWineOcr'; // Add imports
-import { GoogleSignIn } from './GoogleSignIn';
-import { useAuth } from '../hooks/useAuth';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { ProcessingTableRow, ProcessingResult } from '../types';
+import {
+  uploadImages,
+  processOcr,
+  compareBatch,
+  uploadToDriveApi,
+  uploadToShopifyBatch,
+  refreshShopifyCache,
+  healthCheck
+} from "../api/wineOcrClient";
 import { useDrive } from '../hooks/useDrive';
+import { DriveUploadSelection } from '../types/drive';
 
-export const WineOcrWizard: React.FC = () => {
-  const { user } = useAuth();
-  const { state: drive, connectDrive } = useDrive();
-  const [preview, setPreview] = React.useState<{ url: string; name: string } | null>(null);
-  const [selectedImage, setSelectedImage] = useState<{ url: string; name: string } | null>(null);
+export type WizardStep = 1 | 2 | 3 | 4;
 
-  const {
+export interface FilterState {
+  status?: 'failed' | 'uploaded_to_drive' | 'ocr_done' | 'uploaded' | 'llm_done' | 'formatted';
+  needsReview?: boolean;
+  search?: string;
+}
+
+export const TIME_PER_IMAGE_SECONDS = 15;
+
+export const formatTime = (seconds: number): string => {
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return minutes > 0 ? `${minutes} min ${remainingSeconds} sec` : `${seconds} sec`;
+};
+
+const calculateEstimatedTime = (imageCount: number): number => {
+  return imageCount * TIME_PER_IMAGE_SECONDS;
+};
+
+interface OcrResponse {
+  results: Array<{
+    original_filename: string;
+    new_filename: string;
+    formatted_name: string;
+  }>;
+}
+
+interface CompareResponse {
+  results: Array<{
+    image: string;
+    matches: {
+      orig: string;
+      final: string;
+      candidates: Array<{
+        gid?: string;
+        text: string;
+        score: number;
+        reason: string;
+      }>;
+      validated_gid?: string;
+      need_human_review?: boolean;
+      nhr?: boolean;
+    };
+  }>;
+}
+
+interface ApiError extends Error {
+  message: string;
+}
+
+function isCompareResponse(obj: any): obj is CompareResponse {
+  return obj && Array.isArray(obj.results);
+}
+
+export const useWineOcr = () => {
+  const [step, setStep] = useState<WizardStep>(2);
+  const [rows, setRows] = useState<ProcessingTableRow[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [globalUploading, setGlobalUploading] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshResult, setRefreshResult] = useState<string | null>(null);
+
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [compareLoading, setCompareLoading] = useState(false);
+  const [ocrStarted, setOcrStarted] = useState(false);
+  const [compareStarted, setCompareStarted] = useState(false);
+  const [ocrLocked, setOcrLocked] = useState(false);
+  const [compareLocked, setCompareLocked] = useState(false);
+  const [uploadMs, setUploadMs] = useState<number | null>(null);
+  const [ocrMs, setOcrMs] = useState<number | null>(null);
+  const [compareMs, setCompareMs] = useState<number | null>(null);
+  const [healthLoading, setHealthLoading] = useState(false);
+  const [healthStatus, setHealthStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const cancellationRef = useRef<{ cancelled: boolean }>({ cancelled: false });
+  const [filter, setFilter] = useState<FilterState>({});
+  const { state: drive, uploadToDrive } = useDrive();
+
+  // ----------------------
+  // Reset / control
+  // ----------------------
+  const resetBatch = useCallback(() => {
+    setStep(2);
+    setRows([]);
+    setError(null);
+    setHealthStatus(null);
+    setOcrStarted(false);
+    setCompareStarted(false);
+    setOcrLocked(false);
+    setCompareLocked(false);
+    setUploadMs(null);
+    setOcrMs(null);
+    setCompareMs(null);
+    setSuccessMessage(null);
+    setRefreshResult(null);
+    cancellationRef.current.cancelled = false;
+  }, []);
+
+  const cancel = useCallback(() => {
+    cancellationRef.current.cancelled = true;
+    setOcrLoading(false);
+    setCompareLoading(false);
+  }, []);
+
+  const checkHealth = useCallback(async () => {
+    setHealthLoading(true);
+    setError(null);
+    try {
+      const res = await healthCheck();
+      setHealthStatus(typeof res === 'string' ? res : (res?.status || 'ok'));
+    } catch (error: unknown) {
+      const err = error as ApiError;
+      setError(err.message || 'Health check failed');
+    } finally {
+      setHealthLoading(false);
+    }
+  }, []);
+
+  // ----------------------
+  // Upload images to backend
+  // ----------------------
+  const handleUpload = useCallback(async (files: File[]) => {
+    setError(null);
+    setUploading(true);
+    const t0 = performance.now();
+    try {
+      const uploads = await uploadImages(files);
+      const list = Array.isArray(uploads) ? uploads : [];
+      if (list.length === 0) throw new Error('Upload did not return any items');
+
+      // normalize basenames to align rows and responses
+      const normalize = (name?: string) => (name || '').split(/[\\/]/).pop()!.toLowerCase();
+      const fileByBase = new Map<string, File>();
+      files.forEach(f => fileByBase.set(normalize(f.name), f));
+
+      const newRows: ProcessingTableRow[] = list.map((u, idx) => {
+        const base = normalize(u.filename);
+        const srcFile = fileByBase.get(base) || files[idx] || files[0];
+        const preview = u.previewUrl || (srcFile ? URL.createObjectURL(srcFile) : undefined);
+        const userId = localStorage.getItem('wine_ocr_user_id') || 'me';
+        return {
+          id: u.id,
+          userId,
+          filename: u.filename,
+          baseName: base,
+          originalBaseName: normalize(srcFile?.name),
+          status: 'uploaded',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          previewUrl: preview,
+          originalFile: srcFile,
+          result: undefined
+        };
+      });
+
+      setRows(prev => [...prev, ...newRows]);
+
+      // reset flags for new session
+      setOcrStarted(false);
+      setCompareStarted(false);
+      setOcrLocked(false);
+      setCompareLocked(false);
+
+      // Best-effort: upload to Drive input folder for preview if linked
+      if (drive.linked) {
+        for (const row of newRows) {
+          if (!row.originalFile) continue;
+          try {
+            const uploadResponse = await uploadToDrive([{
+              image: row.filename,
+              selected_name: row.filename,
+              target: 'output'
+            }]);
+            if (uploadResponse.success && uploadResponse.drive_file) {
+              setRows(prev => prev.map(r => r.id === row.id ? ({
+                ...r,
+                driveIds: { ...r.driveIds, input: uploadResponse.drive_file?.id },
+                driveLinks: { ...r.driveLinks, input: uploadResponse.drive_file?.webViewLink }
+              }) : r));
+            }
+          } catch (e) {
+            console.error('Drive upload failed for', row.filename, e);
+          }
+        }
+      }
+
+      setStep(3);
+    } catch (error: unknown) {
+      const err = error as ApiError;
+      setError(err?.message || 'Upload failed');
+    } finally {
+      setUploading(false);
+      setUploadMs(Math.max(0, Math.round(performance.now() - t0)));
+    }
+  }, [drive.linked, uploadToDrive]);
+
+  // ----------------------
+  // Run OCR
+  // ----------------------
+  const runOcr = useCallback(async () => {
+    setError(null);
+    setOcrLoading(true);
+    setOcrStarted(true);
+    cancellationRef.current.cancelled = false;
+    const t0 = performance.now();
+
+    try {
+      const ids = rows.map(r => r.id);
+      if (ids.length === 0) throw new Error('No files to process');
+
+      const estimatedTime = calculateEstimatedTime(ids.length);
+      console.log(`Processing ${ids.length} images. Estimated time: ${formatTime(estimatedTime)}`);
+
+      const raw = await processOcr(ids) as OcrResponse;
+
+      if (!raw.results || raw.results.length === 0) {
+        throw new Error('OCR returned no results');
+      }
+
+      const results = raw.results;
+      const usedIndexes = new Set<number>();
+      setRows(prev => prev.map((r) => {
+        const normalize = (name?: string) => (name || '').split(/[\\/]/).pop()!.toLowerCase();
+        const rBase = r.baseName || normalize(r.filename);
+        let matchIndex = results.findIndex(x => rBase === normalize(x.new_filename) || rBase === normalize(x.original_filename));
+        if (matchIndex === -1) {
+          for (let i = 0; i < results.length; i++) {
+            if (!usedIndexes.has(i)) { matchIndex = i; break; }
+          }
+        }
+        if (matchIndex === -1) return r;
+        usedIndexes.add(matchIndex);
+        const res = results[matchIndex];
+        return {
+          ...r,
+          serverFilename: res.new_filename,
+          status: 'ocr_done',
+          updatedAt: new Date().toISOString(),
+          result: {
+            id: r.id,
+            fileId: r.id,
+            ocrText: res.formatted_name,
+            topMatches: [],
+            selectedOption: '',
+            correctionStatus: 'NHR',
+            finalOutput: '',
+            approved: false,
+            timestamps: { ocrDone: new Date().toISOString() }
+          }
+        };
+      }));
+
+      setOcrLocked(true);
+      setOcrMs(Math.max(0, Math.round(performance.now() - t0)));
+    } catch (error: unknown) {
+      const err = error as ApiError;
+      setError(err?.message || 'OCR failed');
+      setOcrLocked(true);
+      setOcrMs(Math.max(0, Math.round(performance.now() - t0)));
+    } finally {
+      setOcrLoading(false);
+    }
+  }, [rows]);
+
+  // ----------------------
+  // Compare / Match
+  // ----------------------
+  const runCompare = useCallback(async () => {
+    setError(null);
+    setCompareLoading(true);
+    setCompareStarted(true);
+    const t0 = performance.now();
+
+    try {
+      const ids = rows.filter(r => r.status !== 'failed').map(r => r.id);
+      if (ids.length === 0) throw new Error('No successful OCR items to compare');
+
+      const raw = await compareBatch(ids) as CompareResponse | any[];
+
+      if (isCompareResponse(raw)) {
+        const results = raw.results;
+        const normalize = (name?: string) => (name || '').split(/[\\/]/).pop()!.toLowerCase();
+        setRows(prev => prev.map(r => {
+          const rBase = r.baseName || normalize(r.filename) || normalize(r.serverFilename);
+          const found = results.find(x => normalize(x.image) === rBase || normalize(x.image) === normalize(r.serverFilename));
+          if (!found) return r;
+
+          const sorted = [...(found.matches.candidates || [])].sort((a, b) => (Number(b.score) || 0) - (Number(a.score) || 0));
+          const topMatches = sorted.slice(0, 3).map(c => ({ option: c.text, score: Number(c.score) || 0, reason: c.reason }));
+          const best = topMatches[0];
+          const needsReview = Boolean(found.matches.need_human_review || (found.matches as any).nhr);
+          let correctionStatus: ProcessingResult['correctionStatus'] = 'NHR';
+          if (needsReview) {
+            const ocrNoLabel = (found.matches.orig || '').toLowerCase().includes('no label');
+            correctionStatus = ocrNoLabel ? 'ocr_failed' : 'search_failed';
+          } else {
+            correctionStatus = 'approved';
+          }
+
+          const result: ProcessingResult = {
+            ...(r.result as ProcessingResult),
+            ocrText: found.matches.orig || r.result?.ocrText || '',
+            topMatches,
+            selectedOption: needsReview ? 'NHR' : (best?.option || 'NHR'),
+            finalOutput: needsReview ? '' : (found.matches.final || best?.option || (r.result?.finalOutput || '')),
+            matchConfidence: best?.score,
+            needsReview,
+            validatedGid: found.matches.validated_gid,
+            correctionStatus
+          };
+          return { ...r, status: 'formatted', result };
+        }));
+        setStep(4);
+      } else if (Array.isArray(raw)) {
+        console.warn('Compare returned array, adapt handling here if needed:', raw);
+      } else {
+        throw new Error('Unexpected Compare response format');
+      }
+
+      setCompareLocked(true);
+      setCompareMs(Math.max(0, Math.round(performance.now() - t0)));
+    } catch (error: unknown) {
+      const err = error as ApiError;
+      setError(err?.message || 'Compare failed, try again');
+      setCompareLocked(true);
+      setCompareMs(Math.max(0, Math.round(performance.now() - t0)));
+    } finally {
+      setCompareLoading(false);
+    }
+  }, [rows]);
+
+  // ----------------------
+  // Upload single result to Drive (existing per-file)
+  // ----------------------
+  const uploadResultToDrive = useCallback(async (fileId: string) => {
+    const row = rows.find(r => r.id === fileId);
+    if (!row) {
+      setError('Upload failed: File not found');
+      return false;
+    }
+    if (!row.result) {
+      setError('Upload failed: File has no processing result');
+      return false;
+    }
+
+    try {
+      setError(null);
+      const selectedName = row.result.finalOutput || row.result.selectedOption || row.filename;
+      const safeName = (selectedName || 'unnamed')
+        .replace(/[^a-z0-9]/gi, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_|_$/g, '') + '.jpg';
+
+      const isNHR = row.result.correctionStatus === 'NHR' || row.result.needsReview;
+      const selection: DriveUploadSelection = {
+        image: row.originalBaseName || row.filename,
+        selected_name: safeName,
+        target: isNHR ? 'nhr' : 'output',
+      };
+
+      if (isNHR) {
+        const nhrReason = (row.result.correctionStatus || '').toLowerCase();
+        selection.nhr_reason =
+          ['search_failed', 'ocr_failed', 'manual_rejection', 'others'].includes(nhrReason)
+            ? nhrReason as DriveUploadSelection['nhr_reason']
+            : 'others';
+      }
+
+      const uploadResponse = await uploadToDrive([selection]);
+      if (uploadResponse.success) {
+        setRows(prev => prev.map(r =>
+          r.id === fileId
+            ? {
+              ...r,
+              status: 'uploaded_to_drive',
+              driveIds: { ...r.driveIds, target: uploadResponse.drive_file?.id },
+              driveLinks: { ...r.driveLinks, target: uploadResponse.drive_file?.webViewLink }
+            }
+            : r
+        ));
+        return true;
+      }
+      if (uploadResponse.error) {
+        setError(`Drive upload failed: ${uploadResponse.error}`);
+        return false;
+      }
+      return true;
+    } catch (error: unknown) {
+      const err = error as ApiError;
+      console.error('Drive upload error:', err);
+      setError(err.message || 'Drive upload failed');
+      return false;
+    }
+  }, [rows, uploadToDrive]);
+
+  // ----------------------
+  // Batch upload to Drive & Shopify (new)
+  // ----------------------
+  const uploadToDriveAndShopify = useCallback(async (selections: DriveUploadSelection[]) => {
+    setGlobalUploading(true);
+    setError(null);
+    setSuccessMessage(null);
+    try {
+      const userId = localStorage.getItem('wine_ocr_user_id') || 'me';
+
+      // Drive payload
+      const drivePayload = { user_id: userId, selections };
+      const driveRes = await uploadToDriveApi(drivePayload);
+
+      // Shopify expects array of { image, selected_name, gid? } - backend you have supports selection list
+      // Here we map to a minimal shape; adjust if your backend expects other keys.
+      const shopifySelections = selections.map(s => ({
+        image: s.image,
+        selected_name: s.selected_name,
+        gid: (s as any).gid
+      }));
+      const shopRes = await uploadToShopifyBatch(shopifySelections);
+
+      setSuccessMessage(`Successfully uploaded ${selections.length} items to Drive and Shopify`);
+
+      // Best-effort: update rows using driveRes if it contains file mappings
+      try {
+        if (driveRes?.files_organized && Array.isArray(driveRes.files_organized)) {
+          const mapping = driveRes.files_organized;
+          setRows(prev => prev.map(r => {
+            const found = mapping.find((m: any) => (m.ocr_filename === r.serverFilename || m.filename === r.filename));
+            if (!found) return r;
+            return {
+              ...r,
+              status: 'uploaded_to_drive',
+              driveIds: { ...r.driveIds, target: driveRes.upload_result?.drive_file_id || r.driveIds?.target },
+              driveLinks: { ...r.driveLinks, target: driveRes.upload_result?.webViewLink || r.driveLinks?.target }
+            };
+          }));
+        }
+      } catch (e) {
+        console.warn('Could not update rows from drive response', e);
+      }
+
+      return { driveRes, shopRes };
+    } catch (error: any) {
+      setError(error?.message || 'Upload to Drive/Shopify failed');
+      throw error;
+    } finally {
+      setGlobalUploading(false);
+    }
+  }, []);
+
+  // ----------------------
+  // Refresh Shopify Cache
+  // ----------------------
+  const refreshShopify = useCallback(async () => {
+    setRefreshing(true);
+    setError(null);
+    setRefreshResult(null);
+    try {
+      const res = await refreshShopifyCache();
+      if (res && typeof res === 'object') {
+        setRefreshResult(res.message || JSON.stringify(res));
+      } else {
+        setRefreshResult(String(res));
+      }
+    } catch (error: any) {
+      setError(error?.message || 'Refresh failed');
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
+  // ----------------------
+  // Update row result
+  // ----------------------
+  const updateResult = useCallback((fileId: string, updates: Partial<ProcessingResult>) => {
+    setRows(prev => prev.map(r => r.id === fileId && r.result ? ({ ...r, result: { ...r.result, ...updates } }) : r));
+  }, []);
+
+  const clear = useCallback(() => setRows([]), []);
+
+  // ----------------------
+  // CSV export (client side)
+  // ----------------------
+  const exportCsvData = useCallback(() => {
+    const headers = ['Filename','OCR Text','Selected Match','Top3','Confidence','Needs Review','Validated GID'];
+    const lines = [headers.join(',')];
+    rows.forEach(r => {
+      const top3 = (r.result?.topMatches || []).slice(0,3).map(m => `${m.option} (${m.score.toFixed(2)})`).join(' | ');
+      const row = [
+        r.filename,
+        JSON.stringify(r.result?.ocrText || ''),
+        JSON.stringify(r.result?.selectedOption || ''),
+        JSON.stringify(top3),
+        String(r.result?.matchConfidence ?? ''),
+        (r.result?.needsReview ? 'Yes' : 'No'),
+        JSON.stringify(r.result?.validatedGid || '')
+      ];
+      lines.push(row.join(','));
+    });
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'wine-ocr-results.csv';
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  }, [rows]);
+
+  // ----------------------
+  // Filtered rows & flags
+  // ----------------------
+  const filteredRows = useMemo(() => {
+    return rows.filter(r => {
+      if (filter.status && r.status !== filter.status) return false;
+      if (filter.needsReview !== undefined && (r.result?.needsReview || false) !== filter.needsReview) return false;
+      if (filter.search) {
+        const text = `${r.filename} ${r.result?.ocrText || ''} ${r.result?.finalOutput || ''}`.toLowerCase();
+        if (!text.includes(filter.search.toLowerCase())) return false;
+      }
+      return true;
+    });
+  }, [rows, filter]);
+
+  const canRunCompare = useMemo(() => {
+    const anyOcrDone = rows.some(r => r.status === 'ocr_done' || r.status === 'formatted' || r.status === 'uploaded_to_drive');
+    return anyOcrDone && !compareLocked;
+  }, [rows, compareLocked]);
+
+  return {
+    // state
     step,
-    rows,
-    allRows,
+    rows: filteredRows,
+    allRows: rows,
     uploading,
+    globalUploading,
+    successMessage,
+    refreshing,
+    refreshResult,
+    processing: ocrLoading || compareLoading,
     ocrLoading,
     compareLoading,
     ocrStarted,
@@ -28,353 +564,26 @@ export const WineOcrWizard: React.FC = () => {
     uploadMs,
     ocrMs,
     compareMs,
+    healthLoading,
+    healthStatus,
     error,
     filter,
+    drive,
+    // actions
     setStep,
+    setRows,
     setFilter,
+    resetBatch,
+    cancel,
+    checkHealth,
     handleUpload,
     runOcr,
     runCompare,
     uploadResultToDrive,
+    uploadToDriveAndShopify,
+    refreshShopify,
     updateResult,
-    cancel,
-    exportCsvData
-  } = useWineOcr();
-
-  const mustSignIn = !user;
-  const mustLinkDrive = user && !drive.linked;
-
-  return (
-    <div className="space-y-8">
-      {/* Drive Connection Status */}
-      <div className="flex items-center justify-end space-x-2">
-        <HardDrive className={drive.linked ? "text-green-500" : "text-red-500"} size={20} />
-        <span className={`text-sm font-medium ${drive.linked ? "text-green-600" : "text-red-600"}`}>
-          {drive.linked ? "Connected to Google Drive" : "Not Connected to Google Drive"}
-        </span>
-       
-      </div>
-
-      {/* Stepper simplified */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className={`${step >= 2 ? 'border-red-600 bg-red-50' : 'border-gray-200'} p-3 rounded border`}>
-          <p className="text-sm font-medium">1. Upload</p>
-        </div>
-        <div className={`${step >= 3 ? 'border-red-600 bg-red-50' : 'border-gray-200'} p-3 rounded border`}>
-          <p className="text-sm font-medium">2. OCR</p>
-        </div>
-        <div className={`${step >= 4 ? 'border-red-600 bg-red-50' : 'border-gray-200'} p-3 rounded border`}>
-          <p className="text-sm font-medium">3. Review</p>
-        </div>
-      </div>
-
-      {/* Add Image Count Display */}
-      {allRows.length > 0 && (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <span className="text-sm font-medium text-gray-700">Total Images:</span>
-              <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium">
-                {allRows.length}
-              </span>
-            </div>
-            {!ocrStarted && (
-              <div className="text-sm text-gray-600">
-                Estimated processing time: {formatTime(allRows.length * TIME_PER_IMAGE_SECONDS)}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Errors */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded p-3 flex items-start space-x-2">
-          <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
-          <p className="text-sm text-red-800">{error}</p>
-        </div>
-      )}
-
-      {/* Step 2: Upload */}
-      {step === 2 && (
-        <div>
-          {mustSignIn && (
-            <div className="mb-4">
-              <p className="text-sm text-red-700 mb-2">Sign in first to proceed</p>
-              <GoogleSignIn />
-            </div>
-          )}
-
-          {!mustSignIn && mustLinkDrive && (
-            <div className="mb-4 flex flex-col items-start space-y-2">
-              <button
-                onClick={connectDrive}
-                disabled={!!drive.ensuring}
-                className="flex items-center space-x-2 px-4 py-2 bg-red-900 text-white rounded-lg shadow hover:bg-red-800 disabled:opacity-50"
-              >
-                {drive.ensuring ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <HardDrive className="h-4 w-4" />
-                )}
-                <span>{drive.ensuring ? 'Connecting...' : 'Connect Drive'}</span>
-              </button>
-              {drive.error && (
-                <p className="text-sm text-red-600">❌ {drive.error}</p>
-              )}
-            </div>
-          )}
-
-          <FileUploadZone
-            onFilesSelected={(files) => handleUpload(files)}
-            uploading={uploading}
-            disabled={!!(uploading || mustSignIn || mustLinkDrive)}
-            onPreviewFile={(file) => setPreview({ url: URL.createObjectURL(file), name: file.name })}
-          />
-
-          {/* Uploaded Images Grid */}
-          {allRows.length > 0 && (
-            <div className="mt-4 p-4 bg-white rounded-lg border border-gray-200">
-              <h3 className="text-sm font-medium text-gray-700 mb-3">
-                Uploaded Images ({allRows.length})
-              </h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                {allRows.map((file) => (
-                  <div
-                    key={file.id}
-                    className="relative cursor-pointer"
-                    onClick={() => file.previewUrl && setSelectedImage({
-                      url: file.previewUrl,
-                      name: file.filename
-                    })}
-                  >
-                    <img
-                      src={file.previewUrl}
-                      alt={file.filename}
-                      className="h-24 w-24 object-cover rounded-lg border-2 border-gray-200 hover:border-red-500 transition-colors"
-                    />
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-                      <span className="bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
-                        Click to preview
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {uploading && (
-            <div className="mt-3 text-sm text-gray-700 inline-flex items-center">
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Uploading images...
-            </div>
-          )}
-          {uploadMs != null && !uploading && (
-            <div className="mt-2 text-xs text-gray-500">
-              Upload completed in {(uploadMs / 1000).toFixed(2)} s
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Step 3: Processing */}
-      {step === 3 && (
-        <div className="space-y-4">
-          {/* Estimated time display */}
-          {allRows.length > 0 && (
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <span className="text-sm font-medium text-gray-700">
-                    Processing {allRows.length} {allRows.length === 1 ? 'image' : 'images'}
-                  </span>
-                  <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium">
-                    Estimated time: {formatTime(allRows.length * TIME_PER_IMAGE_SECONDS)}
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="flex items-center justify-between">
-            <div className="space-x-2">
-              <button
-                onClick={runOcr}
-                disabled={ocrLoading || allRows.length === 0 || ocrLocked}
-                className={`inline-flex items-center px-3 py-2 rounded ${
-                  ocrLocked 
-                    ? 'bg-white text-gray-700 border border-gray-300' 
-                    : 'bg-red-900 text-white'
-                } disabled:opacity-50`}
-              >
-                {ocrLoading ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Play className="h-4 w-4 mr-2" />
-                )}
-                {ocrLocked ? 'OCR Complete' : 'Run OCR'}
-              </button>
-              
-              <button
-                onClick={runCompare}
-                disabled={compareLoading || allRows.length === 0 || !canRunCompare || compareLocked}
-                className={`inline-flex items-center px-3 py-2 rounded ${
-                  ocrLocked && !compareLocked 
-                    ? 'bg-red-900 text-white' 
-                    : 'bg-white text-gray-700 border border-gray-300'
-                } disabled:opacity-50`}
-              >
-                {compareLoading ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Play className="h-4 w-4 mr-2" />
-                )}
-                {compareLocked ? 'Compared' : 'Compare'}
-              </button>
-
-              <button
-                onClick={cancel}
-                disabled={!ocrLoading && !compareLoading}
-                className="inline-flex items-center px-3 py-2 rounded border border-gray-300 text-gray-700 bg-white disabled:opacity-50"
-              >
-                <StopCircle className="h-4 w-4 mr-2" />
-                Cancel
-              </button>
-            </div>
-          </div>
-
-          {(ocrLoading || compareLoading) && (
-            <div className="text-sm text-gray-700 inline-flex items-center">
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              {ocrLoading ? 'Running OCR...' : 'Comparing matches...'}
-            </div>
-          )}
-          {compareMs != null && !compareLoading && compareLocked && (
-            <div className="text-xs text-gray-500">
-              Compare completed in {(compareMs / 1000).toFixed(2)} s
-            </div>
-          )}
-
-          <ProcessingTable
-            files={rows}
-            onUpdateResult={updateResult}
-            onRetryFile={() => {}}
-            onUploadToDrive={uploadResultToDrive}
-            showStatus={false}
-            showOcr={ocrStarted}
-            showMatches={compareStarted}
-            showFinal={compareStarted}
-            onPreviewClick={(file) =>
-              setPreview({ url: file.previewUrl || '', name: file.filename })
-            }
-          />
-        </div>
-      )}
-
-      {/* Step 4: Review */}
-      {step === 4 && (
-        <div className="space-y-4">
-          {/* filters */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <select
-                value={filter.status || ''}
-                onChange={(e) =>
-                  setFilter({ ...filter, status: (e.target.value as any) || undefined })
-                }
-                className="text-sm border-gray-300 rounded"
-              >
-                <option value="">All Statuses</option>
-                <option value="formatted">Formatted</option>
-                <option value="failed">Failed</option>
-              </select>
-              <label className="text-sm inline-flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={filter.needsReview || false}
-                  onChange={(e) => setFilter({ ...filter, needsReview: e.target.checked })}
-                  className="h-4 w-4 text-red-600"
-                />
-                <span>Needs Review</span>
-              </label>
-              <input
-                type="text"
-                placeholder="Search..."
-                value={filter.search || ''}
-                onChange={(e) => setFilter({ ...filter, search: e.target.value })}
-                className="text-sm border-gray-300 rounded px-2 py-1"
-              />
-            </div>
-            <div className="space-x-2">
-              <button
-                onClick={exportCsvData}
-                className="px-3 py-2 rounded border border-gray-300 text-sm"
-              >
-                Export CSV
-              </button>
-            </div>
-          </div>
-
-          <ProcessingTable
-            files={rows}
-            onUpdateResult={updateResult}
-            onRetryFile={() => {}}
-            showStatus
-            showOcr
-            showMatches
-            showFinal
-            onPreviewClick={(file) =>
-              setPreview({ url: file.previewUrl || '', name: file.filename })
-            }
-          />
-
-          {rows.some((r) => r.status === 'formatted') && (
-            <div className="mt-4">
-              <button
-                onClick={async () => {
-                  for (const r of rows) {
-                    if (!r.originalFile) continue;
-                    await uploadResultToDrive(r.id);
-                  }
-                  setStep(2);
-                }}
-                className="w-full sm:w-auto inline-flex items-center px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700"
-              >
-                Upload to Drive
-              </button>
-            </div>
-          )}
-
-          {/* Image Preview Modal */}
-          {selectedImage && (
-            <div 
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75"
-              onClick={() => setSelectedImage(null)}
-            >
-              <div 
-                className="relative bg-white rounded-lg shadow-xl max-w-5xl w-full mx-4"
-                onClick={e => e.stopPropagation()}
-              >
-                <div className="absolute top-0 right-0 p-4">
-                  <button
-                    onClick={() => setSelectedImage(null)}
-                    className="text-gray-500 hover:text-gray-700"
-                  >
-                    <X className="h-6 w-6" />
-                  </button>
-                </div>
-                <div className="p-4">
-                  <img
-                    src={selectedImage.url}
-                    alt={selectedImage.name}
-                    className="max-h-[80vh] mx-auto object-contain"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
+    clear,
+    exportCsvData,
+  };
 };

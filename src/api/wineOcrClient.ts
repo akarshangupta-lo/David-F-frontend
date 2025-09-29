@@ -216,9 +216,10 @@ export async function uploadImages(
   files.forEach((f) => form.append("files", f));
   let raw: any;
   try {
-    raw = await postJson<any>("/upload-images", form, timeoutMs);
-  } catch (e) {
     raw = await postJson<any>("/upload", form, timeoutMs);
+  } catch (e) {
+    console.error("Upload failed:", e);
+    throw e;
   }
   let normalized = normalizeUploadItems(raw, files);
   if (normalized.length < files.length) {
@@ -244,14 +245,14 @@ export async function processOcr(
   ids: string[],
   timeoutMs = 300000
 ): Promise<OcrResponse> {
-  return postJson<OcrResponse>("/process-ocr", { ids }, timeoutMs);
+  return postJson<OcrResponse>("/upload-ocr", { ids }, timeoutMs);
 }
 
 export async function compareBatch(
   ids: string[],
   timeoutMs = 180000
 ): Promise<CompareResponse> {
-  return postJson<CompareResponse>("/compare-batch", { ids }, timeoutMs);
+  return postJson<CompareResponse>("/compare", { ids }, timeoutMs);
 }
 
 export async function exportCsv(
@@ -269,6 +270,34 @@ export async function exportCsv(
       }),
     timeoutMs
   );
-  if (!response.ok) throw new Error(`Export failed: HTTP ${response.status}`);
+  if (!response.ok)
+    throw new Error(`Export failed: HTTP ${response.status}`);
   return response.blob();
+}
+
+// -----------------------------
+// New API Calls
+// -----------------------------
+
+// Upload to Drive
+export async function uploadToDriveApi(
+  payload: any,
+  timeoutMs = 60000
+): Promise<any> {
+  return postJson<any>("/upload-drive", payload, timeoutMs);
+}
+
+// Upload to Shopify
+export async function uploadToShopifyBatch(
+  payload: any,
+  timeoutMs = 60000
+): Promise<any> {
+  return postJson<any>("/upload-shopify", payload, timeoutMs);
+}
+
+// Refresh Shopify cache
+export async function refreshShopifyCache(
+  timeoutMs = 15000
+): Promise<any> {
+  return getJson<any>("/refresh-shopify-cache", timeoutMs);
 }
