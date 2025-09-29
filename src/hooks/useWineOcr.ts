@@ -407,54 +407,71 @@ export const useWineOcr = () => {
     }
   }, [rows, uploadToDrive]);
 
-  // ----------------------
-  // New: Upload to Drive & Shopify (batch)
-  // ----------------------
-  const uploadToDriveAndShopify = useCallback(async (selections: DriveUploadSelection[]) => {
+  
+// ----------------------
+// Upload to Drive & Shopify (batch)
+// ----------------------
+const uploadToDriveAndShopify = useCallback(
+  async (selections: DriveUploadSelection[]) => {
     setGlobalUploading(true);
     setError(null);
     setSuccessMessage(null);
-    try {
-      const userId = localStorage.getItem('wine_ocr_user_id') || 'me';
 
-      // Drive payload shape matches backend
+    try {
+      const userId = localStorage.getItem("wine_ocr_user_id") || "me";
+
+      // Drive
       const drivePayload = { user_id: userId, selections };
       const driveRes = await uploadToDriveApi(drivePayload);
-      // Shopify expects array of selections (your backend expects selections: List[dict])
-      const shopifySelections = selections.map(s => ({
+
+      // Shopify
+      const shopifySelections = selections.map((s) => ({
         image: s.image,
         selected_name: s.selected_name,
-        gid: (s as any).gid // if you have gid in selection; otherwise backends may accept missing gid
+        gid: (s as any).gid,
       }));
       const shopRes = await uploadToShopifyBatch(shopifySelections);
 
-      setSuccessMessage(`Successfully uploaded ${selections.length} items to Drive and Shopify`);
-      // Optionally process driveRes / shopRes to update rows with links/ids
-      // If driveRes contains mapping, update rows accordingly (best-effort):
-      try {
-        if (driveRes?.files_organized) {
-          const mapping = driveRes.files_organized;
-          setRows(prev => prev.map(r => {
-            const found = mapping.find((m: any) => (m.ocr_filename === r.serverFilename || m.filename === r.filename));
+      // ✅ Success if both return 200 OK
+      setSuccessMessage(
+        `✅ Successfully uploaded ${selections.length} item(s) to Drive & Shopify`
+      );
+
+      // Update rows with Drive info if available
+      if (driveRes?.files_organized) {
+        const mapping = driveRes.files_organized;
+        setRows((prev) =>
+          prev.map((r) => {
+            const found = mapping.find(
+              (m: any) =>
+                m.ocr_filename === r.serverFilename || m.filename === r.filename
+            );
             if (!found) return r;
             return {
               ...r,
-              status: 'uploaded_to_drive',
-              driveIds: { ...r.driveIds, target: driveRes.upload_result?.drive_file_id || r.driveIds?.target },
-              driveLinks: { ...r.driveLinks, target: driveRes.upload_result?.webViewLink || r.driveLinks?.target }
+              status: "uploaded_to_drive",
+              driveIds: {
+                ...r.driveIds,
+                target: driveRes.upload_result?.drive_file_id || r.driveIds?.target,
+              },
+              driveLinks: {
+                ...r.driveLinks,
+                target: driveRes.upload_result?.webViewLink || r.driveLinks?.target,
+              },
             };
-          }));
-        }
-      } catch (e) {
-        console.warn('Could not update rows from drive response', e);
+          })
+        );
       }
-
-    } catch (error: any) {
-      setError(error?.message || 'Upload to Drive/Shopify failed');
+    } catch (err: any) {
+      console.error("Upload error:", err);
+      setError(err?.message || "❌ Upload to Drive/Shopify failed");
     } finally {
       setGlobalUploading(false);
     }
-  }, []);
+  },
+  []
+);
+
 
   // ----------------------
   // New: Refresh Shopify Cache
