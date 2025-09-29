@@ -1,4 +1,3 @@
-import React from 'react';
 import { Wine } from 'lucide-react';
 import { GoogleSignIn } from './components/GoogleSignIn';
 import { useAuth } from './hooks/useAuth';
