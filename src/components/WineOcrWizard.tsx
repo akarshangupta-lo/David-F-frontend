@@ -112,7 +112,7 @@ export const WineOcrWizard: React.FC = () => {
         </div>
       )}
 
-      {/* Stepper simplified */}
+      {/* Stepper */}
       <div className="grid grid-cols-3 gap-4">
         <div
           className={`${
@@ -186,41 +186,6 @@ export const WineOcrWizard: React.FC = () => {
             }
           />
 
-          {/* Uploaded Images Grid */}
-          {allRows.length > 0 && (
-            <div className="mt-4 p-4 bg-white rounded-lg border border-gray-200">
-              <h3 className="text-sm font-medium text-gray-700 mb-3">
-                Uploaded Images ({allRows.length})
-              </h3>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                {allRows.map((file) => (
-                  <div
-                    key={file.id}
-                    className="relative cursor-pointer"
-                    onClick={() =>
-                      file.previewUrl &&
-                      setSelectedImage({
-                        url: file.previewUrl,
-                        name: file.filename,
-                      })
-                    }
-                  >
-                    <img
-                      src={file.previewUrl}
-                      alt={file.filename}
-                      className="h-24 w-24 object-cover rounded-lg border-2 border-gray-200 hover:border-red-500 transition-colors"
-                    />
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-                      <span className="bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
-                        Click to preview
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           {uploading && (
             <div className="mt-3 text-sm text-gray-700 inline-flex items-center">
               <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Uploading
@@ -235,10 +200,44 @@ export const WineOcrWizard: React.FC = () => {
         </div>
       )}
 
+      {/* Shared Uploaded Images Grid (available in all steps >= 2) */}
+      {step >= 2 && allRows.length > 0 && (
+        <div className="mt-4 p-4 bg-white rounded-lg border border-gray-200">
+          <h3 className="text-sm font-medium text-gray-700 mb-3">
+            Uploaded Images ({allRows.length})
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            {allRows.map((file) => (
+              <div
+                key={file.id}
+                className="relative cursor-pointer"
+                onClick={() =>
+                  file.previewUrl &&
+                  setSelectedImage({
+                    url: file.previewUrl,
+                    name: file.filename,
+                  })
+                }
+              >
+                <img
+                  src={file.previewUrl}
+                  alt={file.filename}
+                  className="h-24 w-24 object-cover rounded-lg border-2 border-gray-200 hover:border-red-500 transition-colors"
+                />
+                <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                  <span className="bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
+                    Click to preview
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Step 3: Processing */}
       {step === 3 && (
         <div className="space-y-4">
-          {/* Estimated time display */}
           {allRows.length > 0 && (
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
               <div className="flex items-center justify-between">
@@ -314,6 +313,11 @@ export const WineOcrWizard: React.FC = () => {
               {ocrLoading ? 'Running OCR...' : 'Comparing matches...'}
             </div>
           )}
+          {ocrMs != null && !ocrLoading && ocrLocked && (
+            <div className="text-xs text-gray-500">
+              OCR completed in {(ocrMs / 1000).toFixed(2)} s
+            </div>
+          )}
           {compareMs != null && !compareLoading && compareLocked && (
             <div className="text-xs text-gray-500">
               Compare completed in {(compareMs / 1000).toFixed(2)} s
@@ -330,7 +334,7 @@ export const WineOcrWizard: React.FC = () => {
             showMatches={compareStarted}
             showFinal={compareStarted}
             onPreviewClick={(file) =>
-              setPreview({ url: file.previewUrl || '', name: file.filename })
+              setSelectedImage({ url: file.previewUrl || '', name: file.filename })
             }
           />
         </div>
@@ -396,14 +400,12 @@ export const WineOcrWizard: React.FC = () => {
             showMatches
             showFinal
             onPreviewClick={(file) =>
-              setPreview({ url: file.previewUrl || '', name: file.filename })
+              setSelectedImage({ url: file.previewUrl || '', name: file.filename })
             }
           />
 
-          { /* Show upload controls if there are formatted rows OR we already have a successMessage */ }
           {(rows.some((r) => r.status === 'formatted') || successMessage) && (
             <div className="mt-4">
-              {/* Upload to Drive & Shopify */}
               {!successMessage ? (
                 <button
                   onClick={async () => {
@@ -427,8 +429,12 @@ export const WineOcrWizard: React.FC = () => {
                         return {
                           image: r.serverFilename || r.filename,
                           selected_name:
-                            r.result?.finalOutput || r.result?.selectedOption || r.filename,
-                          target: (r.result?.needsReview ? 'nhr' : 'output') as 'nhr' | 'output',
+                            r.result?.finalOutput ||
+                            r.result?.selectedOption ||
+                            r.filename,
+                          target: (r.result?.needsReview
+                            ? 'nhr'
+                            : 'output') as 'nhr' | 'output',
                           nhr_reason,
                           gid: (r.result as any)?.validatedGid,
                         };
