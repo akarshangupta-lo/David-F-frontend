@@ -1,56 +1,51 @@
-import React, { useEffect, useRef, useState } from "react";
-import { User, LogIn } from "lucide-react";
-import { useAuth } from "../hooks/useAuth";
+import React, { useEffect, useState } from "react";
+import { User } from "lucide-react";
 
-declare global {
-  interface Window {
-    google: any;
-  }
-}
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
 export const GoogleSignIn: React.FC = () => {
-  const { user, loading, error, signIn, signOut } = useAuth();
-  const googleButtonRef = useRef<HTMLDivElement>(null);
-  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Initialize Google login button
+  // Handle OAuth redirect callback
   useEffect(() => {
-    if (!clientId) return;
-    if (window.google && !user && !loading) {
-      window.google.accounts.id.initialize({
-        client_id: clientId,
-        callback: async (response: any) => {
-          await signIn(response.credential);
-        },
-      });
+    const urlParams = new URLSearchParams(window.location.search);
+    const authError = urlParams.get("auth_error");
 
-      if (googleButtonRef.current) {
-        window.google.accounts.id.renderButton(googleButtonRef.current, {
-          theme: "outline",
-          size: "large",
-          width: 250,
-        });
-      }
+    if (authError) {
+      setError(`Authentication failed: ${authError}`);
+      window.history.replaceState({}, document.title, window.location.pathname);
     }
-  }, [user, loading, signIn, clientId]);
+  }, []);
+
+  const handleSignIn = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${BACKEND_URL}/auth/init`, {
+        method: "POST",
+      });
+      const data = await response.json();
+      if (data?.url) {
+        window.location.href = data.url; // redirect to backend (Google + Drive flow)
+      } else {
+        throw new Error("No redirect URL from backend");
+      }
+    } catch (err: any) {
+      console.error(err);
+      setError("Failed to start authentication");
+      setLoading(false);
+    }
+  };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-red-50 to-red-100">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-900 mx-auto mb-4"></div>
-          <p className="text-red-800">Loading...</p>
+          <p className="text-red-800">Redirecting to Google...</p>
         </div>
       </div>
     );
-  }
-
-  if (user) {
-    // Don't redirect if we're already on the homepage
-    if (window.location.pathname !== '/') {
-      window.location.href = '/';
-    }
-    return null;
   }
 
   return (
@@ -60,27 +55,27 @@ export const GoogleSignIn: React.FC = () => {
           <div className="mx-auto h-12 w-12 bg-red-900 rounded-full flex items-center justify-center mb-4">
             <User className="h-6 w-6 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Wine Label Processor</h1>
-          <p className="text-gray-600">Sign in with Google to process wine labels</p>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            Wine Label Processor
+          </h1>
+          <p className="text-gray-600">
+            Sign in with Google to process wine labels
+          </p>
         </div>
 
-        {(!clientId || error) && (
+        {error && (
           <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
-            {!clientId
-              ? "Google Client ID missing. Set VITE_GOOGLE_CLIENT_ID and restart the dev server."
-              : error}
+            {error}
           </div>
         )}
 
         <div className="flex justify-center">
-          <div ref={googleButtonRef}></div>
-        </div>
-
-        <div className="mt-6 text-center">
-          <div className="flex items-center space-x-2 text-sm text-gray-500">
-            {/* <LogIn className="h-4 w-4" />
-            <span>Secure authentication with Google integration</span> */}
-          </div>
+          <button
+            onClick={handleSignIn}
+            className="bg-red-900 text-white px-6 py-2 rounded-lg hover:bg-red-800 transition"
+          >
+            Sign in with Google
+          </button>
         </div>
       </div>
     </div>

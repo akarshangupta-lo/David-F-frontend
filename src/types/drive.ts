@@ -43,6 +43,5 @@ export interface DriveState {
   structure?: DriveStructure;
   folder_structure_cached?: boolean;
   pickle_file_exists?: boolean;
-  userId?: string | null;
   lastUploadedFiles?: DriveFile[];
 }

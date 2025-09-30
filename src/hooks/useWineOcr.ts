@@ -1,3 +1,4 @@
+// src/hooks/useWineOcr.ts
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { ProcessingTableRow, ProcessingResult } from '../types';
 import {
@@ -155,7 +156,7 @@ export const useWineOcr = () => {
         const base = normalize(u.filename);
         const srcFile = fileByBase.get(base) || files[idx] || files[0];
         const preview = u.previewUrl || (srcFile ? URL.createObjectURL(srcFile) : undefined);
-        const userId = localStorage.getItem('wine_ocr_user_id') || 'me';
+        const userId = localStorage.getItem('user_id') || 'me'; // ✅ unified key
         return {
           id: u.id,
           userId,
@@ -294,6 +295,7 @@ export const useWineOcr = () => {
             topMatches,
             selectedOption: needsReview ? 'NHR' : (best?.option || 'NHR'),
             finalOutput: needsReview ? '' : (found.matches.final || best?.option || (r.result?.finalOutput || '')),
+
             matchConfidence: best?.score,
             needsReview,
             validatedGid: found.matches.validated_gid,
@@ -334,7 +336,7 @@ export const useWineOcr = () => {
       let shopifyCount = 0;
 
       try {
-        const userId = localStorage.getItem("wine_ocr_user_id") || "me";
+        const userId = localStorage.getItem("user_id") || "me"; // ✅ unified key
 
         const chunks: DriveUploadSelection[][] = [];
         for (let i = 0; i < selections.length; i += concurrency) {

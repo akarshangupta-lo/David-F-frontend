@@ -1,9 +1,11 @@
 export interface User {
   id: string;
   email: string;
-  googleId: string;
+  name?: string;
+  googleId?: string;   // 👈 make optional
   createdAt: string;
 }
+
 
 export interface FileUpload {
   id: string;
