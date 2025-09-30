@@ -185,12 +185,12 @@ export const FileUploadZone: React.FC<FileUploadZoneProps> = ({
             <h3 className="text-sm font-medium text-gray-900">
               Selected Files ({selectedFiles.length})
             </h3>
-            <button
+            {/* <button
               onClick={clearFiles}
               className="text-sm text-gray-500 hover:text-red-600"
             >
               Clear All
-            </button>
+            </button> */}
           </div>
           
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 max-h-60 overflow-y-auto">
