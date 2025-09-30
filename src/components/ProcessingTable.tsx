@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import {
   CheckCircle,
   Clock,
@@ -22,6 +22,7 @@ interface ProcessingTableProps {
   onPreviewClick?: (file: ProcessingTableRow) => void;
   onUploadToDrive?: (fileId: string, target: "nhr" | "output") => Promise<boolean>; // ⬅️ updated
   className?: string;
+  autoScroll?: boolean;
 }
 
 
@@ -246,7 +247,17 @@ export const ProcessingTable: React.FC<ProcessingTableProps> = ({
   onPreviewClick,
   onUploadToDrive,
   className,
+  autoScroll = false,
 }) => {
+  const tableRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (autoScroll && tableRef.current) {
+      const table = tableRef.current;
+      table.scrollTop = table.scrollHeight;
+    }
+  }, [autoScroll, files]);
+
   if (files.length === 0) {
     return (
       <div className="text-center py-12 bg-gray-50 rounded-lg">
@@ -259,7 +270,10 @@ export const ProcessingTable: React.FC<ProcessingTableProps> = ({
     <div
       className={`bg-white shadow-sm border border-gray-200 rounded-lg overflow-hidden ${className || ""}`}
     >
-      <div className="overflow-x-auto max-h-[70vh]">
+      <div
+        ref={tableRef}
+        className="overflow-x-auto max-h-[70vh]"
+      >
         <table className="min-w-full divide-y divide-gray-200 text-base">
           <thead className="bg-gray-50 sticky top-0 z-10">
             <tr>
