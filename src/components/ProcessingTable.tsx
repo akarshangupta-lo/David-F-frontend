@@ -20,9 +20,10 @@ interface ProcessingTableProps {
   showMatches?: boolean;
   showFinal?: boolean;
   onPreviewClick?: (file: ProcessingTableRow) => void;
-  onUploadToDrive?: (fileId: string) => Promise<boolean>;
-  className?: string; // ✅ allow external styling
+  onUploadToDrive?: (fileId: string, target: "nhr" | "output") => Promise<boolean>; // ⬅️ updated
+  className?: string;
 }
+
 
 /** Centralized status config */
 const STATUS_CONFIG = {
@@ -91,6 +92,7 @@ const WineMatchSelector: React.FC<{
   onUpdate: (updates: {
     selectedOption: string;
     correctionStatus?: CorrectionStatus;
+    finalTarget?: "nhr" | "output";
   }) => void;
   name: string;
   needsReview?: boolean;
@@ -107,9 +109,16 @@ const WineMatchSelector: React.FC<{
   React.useEffect(() => {
     if (!selectedOption || selectedOption === "") {
       if (needsReview) {
-        onUpdate({ selectedOption: "NHR", correctionStatus: "NHR" });
+        onUpdate({
+          selectedOption: "NHR",
+          correctionStatus: "NHR",
+          finalTarget: "nhr",
+        });
       } else if (matches && matches.length > 0) {
-        onUpdate({ selectedOption: matches[0].option });
+        onUpdate({
+          selectedOption: matches[0].option,
+          finalTarget: "output",
+        });
       }
     }
   }, [matches, selectedOption, needsReview, onUpdate]);
@@ -132,7 +141,12 @@ const WineMatchSelector: React.FC<{
                 name={name}
                 value={match.option}
                 checked={selectedOption === match.option}
-                onChange={() => onUpdate({ selectedOption: match.option })}
+                onChange={() =>
+                  onUpdate({
+                    selectedOption: match.option,
+                    finalTarget: "output", // ✅ normal matches go to output
+                  })
+                }
                 className="mt-1 h-4 w-4 text-red-600 border-gray-300 focus:ring-red-500"
               />
               <div className="flex-1 min-w-0">
@@ -179,7 +193,11 @@ const WineMatchSelector: React.FC<{
             value="NHR"
             checked={selectedOption === "NHR"}
             onChange={() =>
-              onUpdate({ selectedOption: "NHR", correctionStatus: "NHR" })
+              onUpdate({
+                selectedOption: "NHR",
+                correctionStatus: "NHR",
+                finalTarget: "nhr", // ✅ NHR goes to nhr folder
+              })
             }
             className="mt-1 h-4 w-4 text-orange-600 border-gray-300 focus:ring-orange-500"
           />
@@ -195,6 +213,7 @@ const WineMatchSelector: React.FC<{
                     onUpdate({
                       selectedOption: "NHR",
                       correctionStatus: e.target.value as CorrectionStatus,
+                      finalTarget: "nhr",
                     })
                   }
                   className="block w-full text-sm border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500"
@@ -214,6 +233,7 @@ const WineMatchSelector: React.FC<{
     </div>
   );
 };
+
 
 export const ProcessingTable: React.FC<ProcessingTableProps> = ({
   files,
@@ -364,45 +384,83 @@ export const ProcessingTable: React.FC<ProcessingTableProps> = ({
                 </td>
 
                 {/* Actions */}
-                <td className="px-6 py-5 whitespace-nowrap">
-                  <div className="flex space-x-2">
-                    {file.status === "failed" && (
-                      <button
-                        onClick={() => onRetryFile(file.id)}
-                        className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
-                      >
-                        Retry
-                      </button>
-                    )}
-                    {file.status === "formatted" && onUploadToDrive && (
-                      <button
-                        onClick={() => onUploadToDrive(file.id)}
-                        className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-blue-700 bg-white hover:bg-gray-50"
-                      >
-                        <Upload className="h-4 w-4 mr-1" />
-                        Save to Drive
-                      </button>
-                    )}
-                    {file.status === "uploaded_to_drive" && (
-                      <div className="space-y-1">
-                        <span className="inline-flex items-center px-3 py-1 text-xs font-medium text-green-700">
-                          <CheckCircle className="h-4 w-4 mr-1" />
-                          Uploaded
-                        </span>
-                        {file.driveLinks?.target && (
-                          <a
-                            href={file.driveLinks.target}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="block text-xs text-blue-600 hover:text-blue-800"
-                          >
-                            View in Drive
-                          </a>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </td>
+<td className="px-6 py-5 whitespace-nowrap">
+  <div className="flex flex-col space-y-2">
+    {file.status === "failed" && (
+      <button
+        onClick={() => onRetryFile(file.id)}
+        className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+      >
+        Retry
+      </button>
+    )}
+
+    {file.status === "formatted" && onUploadToDrive && (
+      <>
+        {/* Final Target Selection */}
+        <div className="flex items-center space-x-2">
+          <select
+            className="border rounded px-2 py-1 text-xs"
+            value={file.result?.finalTarget || "output"}
+            onChange={(e) =>
+              onUpdateResult(file.id, {
+                finalTarget: e.target.value as "nhr" | "output",
+              })
+            }
+          >
+            <option value="output">Output</option>
+            <option value="nhr">Needs Human Review</option>
+          </select>
+
+          {/* NHR reason box */}
+          {file.result?.finalTarget === "nhr" && (
+            <input
+              type="text"
+              placeholder="Reason"
+              className="border rounded px-2 py-1 text-xs"
+              value={file.result?.nhrReason || ""}
+              onChange={(e) =>
+                onUpdateResult(file.id, { nhrReason: e.target.value })
+              }
+            />
+          )}
+        </div>
+
+        {/* Save button */}
+        <button
+          onClick={() =>
+            onUploadToDrive(file.id, file.result?.finalTarget || "output")
+          }
+          className="inline-flex items-center px-3 py-1 border border-gray-300 shadow-sm text-xs font-medium rounded-md text-blue-700 bg-white hover:bg-gray-50"
+        >
+          <Upload className="h-4 w-4 mr-1" />
+          Save to Drive
+        </button>
+      </>
+    )}
+
+    {file.status === "uploaded_to_drive" && (
+      <div className="space-y-1">
+        <span className="inline-flex items-center px-3 py-1 text-xs font-medium text-green-700">
+          <CheckCircle className="h-4 w-4 mr-1" />
+          Uploaded
+        </span>
+        {file.driveLinks?.target && (
+          <a
+            href={file.driveLinks.target}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block text-xs text-blue-600 hover:text-blue-800"
+          >
+            View in Drive
+          </a>
+        )}
+      </div>
+    )}
+  </div>
+</td>
+
+
               </tr>
             ))}
           </tbody>

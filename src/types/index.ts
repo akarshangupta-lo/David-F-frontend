@@ -51,6 +51,8 @@ export interface ProcessingResult {
   needsReview?: boolean; // flag surfaced in UI
   matchConfidence?: number; // aggregate confidence
   validatedGid?: string; // backend validated_gid for the chosen match
+  finalTarget?: "nhr" | "output"; // ✅ added
+  nhrReason?: string;            // ✅ added
   timestamps: {
     uploadStart?: string;
     ocrDone?: string;
@@ -59,6 +61,8 @@ export interface ProcessingResult {
     uploadedToDrive?: string;
   };
 }
+
+
 
 export interface ProcessingTableRow extends FileUpload {
   result?: ProcessingResult;

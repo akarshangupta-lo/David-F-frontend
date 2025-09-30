@@ -379,11 +379,21 @@ export const WineOcrWizard: React.FC = () => {
                     "others",
                   ] as const;
 
-                  const nhr_reason = r.result?.needsReview
-                    ? allowedReasons.includes(correction as any)
-                      ? (correction as (typeof allowedReasons)[number])
-                      : "others"
-                    : undefined;
+                  // ✅ Explicit target decision:
+                  // manual override > needsReview > output
+                  const target: "nhr" | "output" =
+                    (r.result as any)?.finalTarget === "nhr"
+                      ? "nhr"
+                      : r.result?.needsReview
+                      ? "nhr"
+                      : "output";
+
+                  const nhr_reason =
+                    target === "nhr"
+                      ? allowedReasons.includes(correction as any)
+                        ? (correction as (typeof allowedReasons)[number])
+                        : "others"
+                      : undefined;
 
                   return {
                     image: r.serverFilename || r.filename,
@@ -391,15 +401,20 @@ export const WineOcrWizard: React.FC = () => {
                       r.result?.finalOutput ||
                       r.result?.selectedOption ||
                       r.filename,
-                    target: (r.result?.needsReview
-                      ? "nhr"
-                      : "output") as "nhr" | "output", // ✅ fixed cast
+                    target,
                     nhr_reason,
                     gid: (r.result as any)?.validatedGid,
                   };
                 });
 
-              await uploadToDriveAndShopify(selections);
+              console.log("🚀 Uploading selections payload:", selections);
+
+              try {
+                await uploadToDriveAndShopify(selections);
+              } catch (err) {
+                console.error("❌ Upload failed:", err);
+                alert("Upload failed, check console for details.");
+              }
             }}
             disabled={globalUploading}
             className="w-full sm:w-auto inline-flex items-center px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
@@ -424,6 +439,9 @@ export const WineOcrWizard: React.FC = () => {
     )}
   </div>
 )}
+
+
+
 
 
       {/* Image Preview Modal */}
