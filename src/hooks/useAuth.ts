@@ -21,7 +21,7 @@ export const useAuth = () => {
         email: params.get("email") || "",
         name: params.get("name") || "",
         createdAt: new Date().toISOString(),
-      } as User;
+      };
 
       // Store full user object
       localStorage.setItem("user", JSON.stringify(userData));
@@ -29,9 +29,8 @@ export const useAuth = () => {
 
       setUser(userData);
 
-      // Remove query params and redirect to main app/dashboard
-      window.history.replaceState({}, document.title, "/");
-      window.location.href = "/app"; // <-- adjust this to your frontend main route
+      // ✅ Clean up URL params but stay on the same page
+      window.history.replaceState({}, document.title, window.location.pathname);
     } else {
       // Try loading from localStorage
       const savedUser = localStorage.getItem("user");

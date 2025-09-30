@@ -1,5 +1,5 @@
 // src/components/GoogleSignIn.tsx
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { User } from "lucide-react";
 
 // ✅ Use fallback so it works with either VITE_BACKEND_URL or VITE_API_URL
@@ -9,24 +9,6 @@ const BACKEND_URL =
 export const GoogleSignIn: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Handle OAuth redirect callback from backend
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const authError = urlParams.get("auth_error");
-    const userId = urlParams.get("user_id");
-
-    if (authError) {
-      setError(`Authentication failed: ${authError}`);
-      window.history.replaceState({}, document.title, window.location.pathname);
-      return;
-    }
-
-    if (userId) {
-      localStorage.setItem("user_id", userId);
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
-  }, []);
 
   const handleSignIn = async () => {
     try {
