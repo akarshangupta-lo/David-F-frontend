@@ -65,9 +65,9 @@ export const WineOcrWizard: React.FC = () => {
   return (
     <div className="space-y-8">
       {/* Sticky Header */}
-      <header className="sticky top-0 z-50 w-full bg-white shadow p-4 text-center text-2xl font-bold">
+      {/* <header className="sticky top-0 z-50 w-full bg-white shadow p-4 text-center text-2xl font-bold">
         Wine Label Processor
-      </header>
+      </header> */}
 
       {/* Success Banner */}
       {successMessage && (
@@ -112,7 +112,7 @@ export const WineOcrWizard: React.FC = () => {
             ) : (
               <RefreshCw className="h-4 w-4" />
             )}
-            <span>{refreshing ? "Refreshing..." : "Refresh"}</span>
+            <span>{refreshing ? "Refreshing..." : "Refresh Shopify Data"}</span>
           </button>
         </div>
       </div>

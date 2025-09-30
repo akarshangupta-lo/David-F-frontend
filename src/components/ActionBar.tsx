@@ -76,14 +76,14 @@ export const ActionBar: React.FC<ActionBarProps> = ({
           )}
 
           {/* Clear All Button */}
-          <button
+          {/* <button
             onClick={onClearFiles}
             disabled={files.length === 0}
             className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Trash2 className="h-4 w-4 mr-2" />
             Clear All
-          </button>
+          </button> */}
 
           {/* Save Results Button */}
           <button
