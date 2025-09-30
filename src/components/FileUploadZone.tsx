@@ -159,8 +159,8 @@ export const FileUploadZone: React.FC<FileUploadZoneProps> = ({
             <span>JPEG</span>
             <span>•</span>
             <span>PNG</span>
-            <span>•</span>
-            <span>WebP</span>
+            {/* <span>•</span>
+            <span>WebP</span> */}
           </div>
         </div>
       </div>
@@ -231,7 +231,7 @@ export const FileUploadZone: React.FC<FileUploadZoneProps> = ({
             <button
               onClick={uploadFiles}
               disabled={uploading}
-              className="px-4 py-2 text-sm font-medium text-white bg-red-900 rounded-lg hover:bg-green-800 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 text-sm font-medium text-white bg-green-900 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {uploading ? 'Uploading...' : 'Upload Images'}
             </button>
