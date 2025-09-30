@@ -444,7 +444,7 @@ export const WineOcrWizard: React.FC = () => {
                   <p className="text-green-700 text-sm">{successMessage}</p>
                   <button
                     onClick={() => reset()}
-                    className="w-full sm:w-auto inline-flex items-center px-3 py-1.5 rounded bg-green-600 text-white hover:bg-green-700 text-sm"
+                    className="w-auto inline-flex items-center px-2 py-1 rounded bg-green-600 text-white hover:bg-green-700 text-xs"
                   >
                     Process Another Batch
                   </button>

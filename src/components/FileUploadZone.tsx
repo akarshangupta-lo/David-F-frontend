@@ -224,7 +224,7 @@ export const FileUploadZone: React.FC<FileUploadZoneProps> = ({
           <div className="mt-4 flex justify-end space-x-2">
             <button
               onClick={clearFiles}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-red-100"
+              className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-red-600 rounded-lg hover:bg-red-700"
             >
               Clear All
             </button>
