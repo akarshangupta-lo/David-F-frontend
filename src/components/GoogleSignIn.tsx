@@ -2,7 +2,9 @@
 import React, { useEffect, useState } from "react";
 import { User } from "lucide-react";
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
+// ✅ Use fallback so it works with either VITE_BACKEND_URL or VITE_API_URL
+const BACKEND_URL =
+  import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_URL;
 
 export const GoogleSignIn: React.FC = () => {
   const [loading, setLoading] = useState(false);
@@ -45,7 +47,7 @@ export const GoogleSignIn: React.FC = () => {
         throw new Error("No redirect URL returned from backend");
       }
     } catch (err: any) {
-      console.error(err);
+      console.error("Auth init failed:", err);
       setError("Failed to start authentication");
       setLoading(false);
     }
