@@ -1,14 +1,15 @@
 // src/hooks/useDrive.ts
 import { useCallback, useState } from "react";
 
-// -----------------------------
-// Types
-// -----------------------------
+/* -----------------------------
+   Types (frontend-friendly shapes)
+   ----------------------------- */
 export interface DriveUploadSelection {
   image: string;
   selected_name: string;
   target: string;
   nhr_reason?: string;
+  gid?: string;
 }
 
 export interface DriveUploadRequest {
@@ -24,118 +25,166 @@ export interface UploadedFile {
 }
 
 export interface DriveUploadResponse {
-  message: string;
-  uploaded_files: UploadedFile[];
-  user_id: string;
-  success_count: number;
+  message?: string;
+  uploaded_files?: UploadedFile[];
+  user_id?: string;
+  success_count?: number;
   errors?: string[];
   error_count?: number;
+  // Backwards-compatible fields your backend may return
+  files_organized?: any;
+  upload_result?: any;
 }
 
-// -----------------------------
-// Hook state
-// -----------------------------
-interface DriveState {
+/* -----------------------------
+   Hook state
+   ----------------------------- */
+export interface DriveState {
   linked: boolean;
-  ensuring: boolean; // ✅ restored so frontend compiles
-  error?: string;
-  lastUploadedFiles: UploadedFile[];
+  ensuring?: boolean;
+  error?: string | null;
+  lastUploadedFiles?: UploadedFile[];
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+const API_BASE = (import.meta as any).env.VITE_API_URL || (process.env as any).NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 
-// -----------------------------
-// Helpers
-// -----------------------------
+/* -----------------------------
+   Helpers
+   ----------------------------- */
 function getUserId(): string | null {
-  // Prefer explicit user_id if available, else fall back to "user"
-  const id = localStorage.getItem("user_id");
-  if (id) return id;
+  // Prefer explicit stored user_id, otherwise parse saved 'user' object
+  const uid = localStorage.getItem("user_id");
+  if (uid) return uid;
 
   const raw = localStorage.getItem("user");
   if (raw) {
     try {
-      return JSON.parse(raw).id ?? null;
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.id) return String(parsed.id);
     } catch {
-      return null;
+      // ignore
     }
   }
+
+  // fallback to legacy key
+  const legacy = localStorage.getItem("wine_ocr_user_id");
+  if (legacy) return legacy;
+
   return null;
 }
 
-// -----------------------------
-// Hook
-// -----------------------------
+/* -----------------------------
+   Hook implementation
+   ----------------------------- */
 export function useDrive() {
   const [state, setState] = useState<DriveState>({
     linked: false,
-    ensuring: false, // ✅ default
-    error: undefined,
+    ensuring: false,
+    error: null,
     lastUploadedFiles: [],
   });
 
-  // ✅ no-op placeholder for compatibility (so WineOcrWizard.tsx won’t break)
-  const connectDrive = useCallback(async () => {
-    console.warn("connectDrive is deprecated and not used anymore.");
-  }, []);
-
-  // check drive status
-  const checkDriveStatus = useCallback(async () => {
+  /**
+   * Check /auth/status on backend to determine whether the current user has Drive linked.
+   * Sets ensuring=true while the check is in flight.
+   */
+  const checkDriveStatus = useCallback(async (): Promise<any> => {
     const userId = getUserId();
-    if (!userId) return { authenticated: false };
+    if (!userId) {
+      // no user id yet; ensure state is not linked
+      setState(prev => ({ ...prev, linked: false, ensuring: false, error: null }));
+      return { authenticated: false };
+    }
 
-    const res = await fetch(`${API_BASE}/is-authenticated?user_id=${userId}`, {
-      credentials: "include",
-    });
-    if (!res.ok) return { authenticated: false };
-
-    const data = await res.json();
-    setState((prev) => ({ ...prev, linked: data.authenticated }));
-    return data;
+    try {
+      setState(prev => ({ ...prev, ensuring: true, error: null }));
+      const url = `${API_BASE}/auth/status?user_id=${encodeURIComponent(userId)}`;
+      const res = await fetch(url, { method: "GET", credentials: "include" });
+      if (!res.ok) {
+        // Try drive-status endpoints for backwards compatibility
+        try {
+          const fallback = await fetch(`${API_BASE}/drive-status?user_id=${encodeURIComponent(userId)}`, { method: "GET", credentials: "include" });
+          if (!fallback.ok) {
+            throw new Error(`Auth status check failed: ${res.status}`);
+          }
+          const dataFallback = await fallback.json();
+          setState(prev => ({ ...prev, linked: !!dataFallback.authenticated, ensuring: false, error: null }));
+          return dataFallback;
+        } catch (err: any) {
+          setState(prev => ({ ...prev, linked: false, ensuring: false, error: err?.message || "Auth status failed" }));
+          return { authenticated: false };
+        }
+      }
+      const data = await res.json();
+      setState(prev => ({ ...prev, linked: !!data.authenticated, ensuring: false, error: null }));
+      return data;
+    } catch (err: any) {
+      setState(prev => ({ ...prev, linked: false, ensuring: false, error: err?.message || "Auth status failed" }));
+      return { authenticated: false };
+    }
   }, []);
 
-  // upload to drive
-  const uploadToDrive = useCallback(
-    async (selections: DriveUploadSelection[]): Promise<DriveUploadResponse> => {
-      if (!state.linked) throw new Error("Drive not connected");
+  /**
+   * Upload to /upload-to-drive
+   */
+  const uploadToDrive = useCallback(async (selections: DriveUploadSelection[]): Promise<DriveUploadResponse> => {
+    if (!state.linked) throw new Error("Drive not connected");
 
-      const userId = getUserId();
-      if (!userId) {
-        setState((prev) => ({
-          ...prev,
-          error: "No user ID found. Please reconnect to Google Drive.",
-        }));
-        throw new Error("User ID not found");
+    const userId = getUserId();
+    if (!userId) {
+      setState(prev => ({ ...prev, error: "No user ID found. Please sign in." }));
+      throw new Error("User ID not found");
+    }
+
+    // validate NHR selections
+    if (selections.some(s => s.target === "nhr" && !s.nhr_reason)) {
+      throw new Error("NHR reason is required for NHR selections");
+    }
+
+    const payload: DriveUploadRequest = { user_id: userId, selections };
+
+    const res = await fetch(`${API_BASE}/upload-to-drive`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      let text = await res.text().catch(() => "");
+      try {
+        const json = JSON.parse(text || "{}");
+        const errMsg = json?.error || `HTTP ${res.status}`;
+        throw new Error(errMsg);
+      } catch {
+        throw new Error(`Drive upload failed: ${res.status}`);
       }
+    }
 
-      if (selections.some((s) => s.target === "nhr" && !s.nhr_reason)) {
-        throw new Error("NHR reason is required for NHR selections");
-      }
+    const data = (await res.json()) as DriveUploadResponse;
 
-      const payload: DriveUploadRequest = { user_id: userId, selections };
+    // update lastUploadedFiles if backend returned uploaded_files
+    if (data.success_count && data.uploaded_files && data.uploaded_files.length > 0) {
+      setState(prev => ({ ...prev, lastUploadedFiles: data.uploaded_files }));
+    } else if (data.uploaded_files && data.uploaded_files.length > 0) {
+      setState(prev => ({ ...prev, lastUploadedFiles: data.uploaded_files }));
+    }
 
-      const res = await fetch(`${API_BASE}/upload-to-drive`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+    return data;
+  }, [state.linked]);
 
-      if (!res.ok) throw new Error(`Drive upload failed: ${res.status}`);
+  // Provide simple noop connectDrive so older code that imports this won't break.
+  // Your flow uses unified auth: sign-in on frontend hits backend /auth/init and /auth/callback -> no manual connect required.
+  const connectDrive = useCallback(async () => {
+    // deprecated / no-op in unified flow.
+    console.info("connectDrive() no-op (unified Google + Drive flow). Use GoogleSignIn to trigger auth.");
+    return;
+  }, []);
 
-      const data: DriveUploadResponse = await res.json();
-
-      if (data.success_count > 0 && data.uploaded_files?.length) {
-        setState((prev) => ({
-          ...prev,
-          lastUploadedFiles: data.uploaded_files,
-        }));
-      }
-
-      return data;
-    },
-    [state.linked]
-  );
-
-  return { state, connectDrive, checkDriveStatus, uploadToDrive };
+  return {
+    state,
+    connectDrive,
+    checkDriveStatus,
+    uploadToDrive,
+  };
 }

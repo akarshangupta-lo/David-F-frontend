@@ -1,3 +1,4 @@
+// src/components/GoogleSignIn.tsx
 import React, { useEffect, useState } from "react";
 import { User } from "lucide-react";
 
@@ -7,13 +8,20 @@ export const GoogleSignIn: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Handle OAuth redirect callback
+  // Handle OAuth redirect callback from backend
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const authError = urlParams.get("auth_error");
+    const userId = urlParams.get("user_id");
 
     if (authError) {
       setError(`Authentication failed: ${authError}`);
+      window.history.replaceState({}, document.title, window.location.pathname);
+      return;
+    }
+
+    if (userId) {
+      localStorage.setItem("user_id", userId);
       window.history.replaceState({}, document.title, window.location.pathname);
     }
   }, []);
@@ -23,12 +31,18 @@ export const GoogleSignIn: React.FC = () => {
       setLoading(true);
       const response = await fetch(`${BACKEND_URL}/auth/init`, {
         method: "POST",
+        credentials: "include",
       });
+
+      if (!response.ok) {
+        throw new Error(`Backend error: ${response.status}`);
+      }
+
       const data = await response.json();
       if (data?.url) {
-        window.location.href = data.url; // redirect to backend (Google + Drive flow)
+        window.location.href = data.url; // Redirect to Google (Drive scopes included)
       } else {
-        throw new Error("No redirect URL from backend");
+        throw new Error("No redirect URL returned from backend");
       }
     } catch (err: any) {
       console.error(err);
@@ -59,7 +73,7 @@ export const GoogleSignIn: React.FC = () => {
             Wine Label Processor
           </h1>
           <p className="text-gray-600">
-            Sign in with Google to process wine labels
+            Sign in with Google to use Drive + process wine labels
           </p>
         </div>
 

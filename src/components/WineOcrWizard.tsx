@@ -22,7 +22,7 @@ import { useDrive } from "../hooks/useDrive";
 
 export const WineOcrWizard: React.FC = () => {
   const { user } = useAuth();
-  const { state: drive, connectDrive } = useDrive();
+  const { state: drive, checkDriveStatus } = useDrive();
 
   const [selectedImage, setSelectedImage] = useState<{
     url: string;
@@ -74,6 +74,15 @@ export const WineOcrWizard: React.FC = () => {
       }, 100);
     }
   }, [compareLocked, compareLoading]);
+
+  // Ensure drive status is checked after sign-in / on mount
+  useEffect(() => {
+    // Fire-and-forget: check drive status when we have a user or even on mount
+    // so the badge will reflect current backend state.
+    checkDriveStatus().catch(() => {
+      /* ignore errors */
+    });
+  }, [user, checkDriveStatus]);
 
   return (
     <div className="space-y-8">
@@ -159,32 +168,12 @@ export const WineOcrWizard: React.FC = () => {
         <div>
           {mustSignIn && (
             <div className="mb-4">
-              <p className="text-sm text-red-700 mb-2">
-                Sign in first to proceed
-              </p>
+              <p className="text-sm text-red-700 mb-2">Sign in first to proceed</p>
               <GoogleSignIn />
             </div>
           )}
 
-          {!mustSignIn && mustLinkDrive && (
-            <div className="mb-4 flex flex-col items-start space-y-2">
-              <button
-                onClick={connectDrive}
-                disabled={!!drive.ensuring}
-                className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg shadow hover:bg-green-700 disabled:opacity-50"
-              >
-                {drive.ensuring ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <HardDrive className="h-4 w-4" />
-                )}
-                <span>{drive.ensuring ? "Connecting..." : "Connect Drive"}</span>
-              </button>
-              {drive.error && (
-                <p className="text-sm text-red-600">❌ {drive.error}</p>
-              )}
-            </div>
-          )}
+          {/* Connect Drive button removed (auth now unified). The badge above still shows connection status. */}
 
           <FileUploadZone
             onFilesSelected={handleUpload}
@@ -210,15 +199,15 @@ export const WineOcrWizard: React.FC = () => {
         <div className="space-y-4">
           {allRows.length > 0 && (
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
-              <div className="flex items-center space-x-2">
-                <span className="text-sm font-medium text-gray-700">
-                  Processing {allRows.length}{" "}
-                  {allRows.length === 1 ? "image" : "images"}
-                </span>
-                <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
-                  Estimated time:{" "}
-                  {formatTime(allRows.length * TIME_PER_IMAGE_SECONDS)}
-                </span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm font-medium text-gray-700">
+                    Processing {allRows.length} {allRows.length === 1 ? "image" : "images"}
+                  </span>
+                  <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
+                    Estimated time: {formatTime(allRows.length * TIME_PER_IMAGE_SECONDS)}
+                  </span>
+                </div>
               </div>
             </div>
           )}
@@ -228,35 +217,21 @@ export const WineOcrWizard: React.FC = () => {
               onClick={runOcr}
               disabled={ocrLoading || allRows.length === 0 || ocrLocked}
               className={`inline-flex items-center px-3 py-2 rounded ${
-                ocrLocked
-                  ? "bg-white text-gray-700 border border-gray-300"
-                  : "bg-green-600 text-white hover:bg-green-700"
+                ocrLocked ? "bg-white text-gray-700 border border-gray-300" : "bg-green-600 text-white hover:bg-green-700"
               } disabled:opacity-50`}
             >
-              {ocrLoading ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Play className="h-4 w-4 mr-2" />
-              )}
+              {ocrLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />}
               {ocrLocked ? "OCR Complete" : "Run OCR"}
             </button>
 
             <button
               onClick={runCompare}
-              disabled={
-                compareLoading || allRows.length === 0 || !canRunCompare || compareLocked
-              }
+              disabled={compareLoading || allRows.length === 0 || !canRunCompare || compareLocked}
               className={`inline-flex items-center px-3 py-2 rounded ${
-                ocrLocked && !compareLocked
-                  ? "bg-green-600 text-white hover:bg-green-700"
-                  : "bg-white text-gray-700 border border-gray-300"
+                ocrLocked && !compareLocked ? "bg-green-600 text-white hover:bg-green-700" : "bg-white text-gray-700 border border-gray-300"
               } disabled:opacity-50`}
             >
-              {compareLoading ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Play className="h-4 w-4 mr-2" />
-              )}
+              {compareLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />}
               {compareLocked ? "Compared" : "Compare"}
             </button>
 
@@ -277,14 +252,10 @@ export const WineOcrWizard: React.FC = () => {
             </div>
           )}
           {ocrMs != null && !ocrLoading && ocrLocked && (
-            <div className="text-xs text-gray-500">
-              OCR completed in {(ocrMs / 1000).toFixed(2)} s
-            </div>
+            <div className="text-xs text-gray-500">OCR completed in {(ocrMs / 1000).toFixed(2)} s</div>
           )}
           {compareMs != null && !compareLoading && compareLocked && (
-            <div className="text-xs text-gray-500">
-              Compare completed in {(compareMs / 1000).toFixed(2)} s
-            </div>
+            <div className="text-xs text-gray-500">Compare completed in {(compareMs / 1000).toFixed(2)} s</div>
           )}
 
           <ProcessingTable
@@ -308,40 +279,39 @@ export const WineOcrWizard: React.FC = () => {
       {/* Step 4: Review */}
       {step === 4 && (
         <div className="space-y-4" ref={resultsRef}>
-          {/* Filters */}
-          <div className="flex items-center space-x-3">
-            <select
-              value={filter.status || ""}
-              onChange={(e) =>
-                setFilter({
-                  ...filter,
-                  status: (e.target.value as any) || undefined,
-                })
-              }
-              className="text-sm border-gray-300 rounded"
-            >
-              <option value="">All Statuses</option>
-              <option value="formatted">Formatted</option>
-              <option value="failed">Failed</option>
-            </select>
-            <label className="text-sm inline-flex items-center space-x-2">
-              <input
-                type="checkbox"
-                checked={filter.needsReview || false}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <select
+                value={filter.status || ""}
                 onChange={(e) =>
-                  setFilter({ ...filter, needsReview: e.target.checked })
+                  setFilter({
+                    ...filter,
+                    status: (e.target.value as any) || undefined,
+                  })
                 }
-                className="h-4 w-4 text-green-600"
+                className="text-sm border-gray-300 rounded"
+              >
+                <option value="">All Statuses</option>
+                <option value="formatted">Formatted</option>
+                <option value="failed">Failed</option>
+              </select>
+              <label className="text-sm inline-flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={filter.needsReview || false}
+                  onChange={(e) => setFilter({ ...filter, needsReview: e.target.checked })}
+                  className="h-4 w-4 text-green-600"
+                />
+                <span>Needs Review</span>
+              </label>
+              <input
+                type="text"
+                placeholder="Search..."
+                value={filter.search || ""}
+                onChange={(e) => setFilter({ ...filter, search: e.target.value })}
+                className="text-sm border-gray-300 rounded px-2 py-1"
               />
-              <span>Needs Review</span>
-            </label>
-            <input
-              type="text"
-              placeholder="Search..."
-              value={filter.search || ""}
-              onChange={(e) => setFilter({ ...filter, search: e.target.value })}
-              className="text-sm border-gray-300 rounded px-2 py-1"
-            />
+            </div>
           </div>
 
           <ProcessingTable
@@ -369,14 +339,8 @@ export const WineOcrWizard: React.FC = () => {
                     const selections = rows
                       .filter((r) => r.status === "formatted")
                       .map((r) => {
-                        const correction =
-                          r.result?.correctionStatus?.toLowerCase?.();
-                        const allowedReasons = [
-                          "search_failed",
-                          "ocr_failed",
-                          "manual_rejection",
-                          "others",
-                        ] as const;
+                        const correction = r.result?.correctionStatus?.toLowerCase?.();
+                        const allowedReasons = ["search_failed", "ocr_failed", "manual_rejection", "others"] as const;
 
                         const target: "nhr" | "output" =
                           (r.result as any)?.finalTarget === "nhr"
@@ -394,10 +358,7 @@ export const WineOcrWizard: React.FC = () => {
 
                         return {
                           image: r.serverFilename || r.filename,
-                          selected_name:
-                            r.result?.finalOutput ||
-                            r.result?.selectedOption ||
-                            r.filename,
+                          selected_name: r.result?.finalOutput || r.result?.selectedOption || r.filename,
                           target,
                           nhr_reason,
                           gid: (r.result as any)?.validatedGid,
@@ -415,9 +376,7 @@ export const WineOcrWizard: React.FC = () => {
                   disabled={globalUploading}
                   className="w-full sm:w-auto inline-flex items-center px-4 py-2 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
                 >
-                  {globalUploading ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : null}
+                  {globalUploading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
                   {globalUploading ? "Uploading..." : "Upload to Drive & Shopify"}
                 </button>
               ) : (
@@ -438,28 +397,15 @@ export const WineOcrWizard: React.FC = () => {
 
       {/* Preview Modal */}
       {selectedImage && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75"
-          onClick={() => setSelectedImage(null)}
-        >
-          <div
-            className="relative bg-white rounded-lg shadow-xl max-w-5xl w-full mx-4"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75" onClick={() => setSelectedImage(null)}>
+          <div className="relative bg-white rounded-lg shadow-xl max-w-5xl w-full mx-4" onClick={(e) => e.stopPropagation()}>
             <div className="absolute top-0 right-0 p-4">
-              <button
-                onClick={() => setSelectedImage(null)}
-                className="text-gray-500 hover:text-gray-700"
-              >
+              <button onClick={() => setSelectedImage(null)} className="text-gray-500 hover:text-gray-700">
                 <X className="h-6 w-6" />
               </button>
             </div>
             <div className="p-4">
-              <img
-                src={selectedImage.url}
-                alt={selectedImage.name}
-                className="max-h-[80vh] mx-auto object-contain"
-              />
+              <img src={selectedImage.url} alt={selectedImage.name} className="max-h-[80vh] mx-auto object-contain" />
             </div>
           </div>
         </div>
