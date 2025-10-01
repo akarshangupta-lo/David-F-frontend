@@ -52,24 +52,51 @@ const API_BASE = (import.meta as any).env.VITE_API_URL || (process.env as any).N
    Helpers
    ----------------------------- */
 function getUserId(): string | null {
-  // Prefer explicit stored user_id, otherwise parse saved 'user' object
+  console.group('🔍 getUserId Debug');
+  
+  // Check all possible storage locations
   const uid = localStorage.getItem("user_id");
-  if (uid) return uid;
-
   const raw = localStorage.getItem("user");
+  const legacy = localStorage.getItem("wine_ocr_user_id");
+  
+  console.log('Storage State:', {
+    "user_id": uid,
+    "user": raw ? JSON.parse(raw) : null,
+    "wine_ocr_user_id": legacy,
+    "all_keys": Object.keys(localStorage)
+  });
+
+  // Prefer explicit stored user_id
+  if (uid) {
+    console.log('✅ Using user_id:', uid);
+    console.groupEnd();
+    return uid;
+  }
+
+  // Then try parsing user object
   if (raw) {
     try {
       const parsed = JSON.parse(raw);
-      if (parsed && parsed.id) return String(parsed.id);
-    } catch {
-      // ignore
+      if (parsed && parsed.id) {
+        console.log('✅ Using parsed user object id:', parsed.id);
+        console.groupEnd();
+        return String(parsed.id);
+      }
+      console.log('⚠️ User object found but no id:', parsed);
+    } catch (e) {
+      console.error('❌ Failed to parse user object:', e);
     }
   }
 
   // fallback to legacy key
-  const legacy = localStorage.getItem("wine_ocr_user_id");
-  if (legacy) return legacy;
+  if (legacy) {
+    console.log('✅ Using legacy key:', legacy);
+    console.groupEnd();
+    return legacy;
+  }
 
+  console.log('❌ No user ID found in any location');
+  console.groupEnd();
   return null;
 }
 
@@ -89,10 +116,15 @@ export function useDrive() {
    * Sets ensuring=true while the check is in flight.
    */
   const checkDriveStatus = useCallback(async (): Promise<any> => {
+    console.group('🔄 checkDriveStatus Debug');
+    
     const userId = getUserId();
+    console.log('🆔 User ID Check:', { userId });
+    
     if (!userId) {
-      // no user id yet; ensure state is not linked
+      console.log('❌ No user ID found, marking as not linked');
       setState(prev => ({ ...prev, linked: false, ensuring: false, error: null }));
+      console.groupEnd();
       return { authenticated: false };
     }
 
@@ -128,11 +160,22 @@ export function useDrive() {
    * Upload to /upload-to-drive
    */
   const uploadToDrive = useCallback(async (selections: DriveUploadSelection[]): Promise<DriveUploadResponse> => {
-    if (!state.linked) throw new Error("Drive not connected");
+    console.group('🚀 uploadToDrive Debug');
+    console.log('Initial State:', { state, selections });
+
+    if (!state.linked) {
+      console.error('❌ Drive not connected');
+      console.groupEnd();
+      throw new Error("Drive not connected");
+    }
 
     const userId = getUserId();
+    console.log('🆔 Retrieved User ID:', userId);
+    
     if (!userId) {
+      console.error('❌ No user ID found');
       setState(prev => ({ ...prev, error: "No user ID found. Please sign in." }));
+      console.groupEnd();
       throw new Error("User ID not found");
     }
 
@@ -143,6 +186,11 @@ export function useDrive() {
 
     const payload: DriveUploadRequest = { user_id: userId, selections };
 
+    console.log('📤 Sending Request:', {
+      url: `${API_BASE}/upload-to-drive`,
+      payload
+    });
+
     const res = await fetch(`${API_BASE}/upload-to-drive`, {
       method: "POST",
       credentials: "include",
@@ -150,13 +198,25 @@ export function useDrive() {
       body: JSON.stringify(payload),
     });
 
+    console.log('📥 Response:', {
+      status: res.status,
+      ok: res.ok,
+      headers: Object.fromEntries(res.headers.entries())
+    });
+
     if (!res.ok) {
       let text = await res.text().catch(() => "");
+      console.error('❌ Upload Error Response:', { status: res.status, text });
+      
       try {
         const json = JSON.parse(text || "{}");
+        console.error('Parsed Error:', json);
         const errMsg = json?.error || `HTTP ${res.status}`;
+        console.groupEnd();
         throw new Error(errMsg);
-      } catch {
+      } catch (e) {
+        console.error('Failed to parse error response:', e);
+        console.groupEnd();
         throw new Error(`Drive upload failed: ${res.status}`);
       }
     }
