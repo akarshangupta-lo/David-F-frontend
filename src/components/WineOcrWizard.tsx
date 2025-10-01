@@ -11,11 +11,8 @@ import {
 } from "lucide-react";
 import { FileUploadZone } from "./FileUploadZone";
 import { ProcessingTable } from "./ProcessingTable";
-import {
-  useWineOcr,
-  TIME_PER_IMAGE_SECONDS,
-  formatTime,
-} from "../hooks/useWineOcr";
+import { useWineOcr } from "../hooks/useWineOcr";
+import { TIME_PER_IMAGE_SECONDS, formatTime } from "../utils/time";
 import { GoogleSignIn } from "./GoogleSignIn";
 import { useAuth } from "../hooks/useAuth";
 import { useDrive } from "../hooks/useDrive";
