@@ -21,18 +21,6 @@ export interface FilterState {
   search?: string;
 }
 
-export const TIME_PER_IMAGE_SECONDS = 15;
-
-export const formatTime = (seconds: number): string => {
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  return minutes > 0 ? `${minutes} min ${remainingSeconds} sec` : `${seconds} sec`;
-};
-
-const calculateEstimatedTime = (imageCount: number): number => {
-  return imageCount * TIME_PER_IMAGE_SECONDS;
-};
-
 interface OcrResponse {
   results: Array<{
     original_filename: string;
@@ -202,9 +190,6 @@ export const useWineOcr = () => {
     try {
       const ids = rows.map(r => r.id);
       if (ids.length === 0) throw new Error('No files to process');
-
-      const estimatedTime = calculateEstimatedTime(ids.length);
-      console.log(`Processing ${ids.length} images. Estimated time: ${formatTime(estimatedTime)}`);
 
       const raw = await processOcr(ids) as OcrResponse;
 
