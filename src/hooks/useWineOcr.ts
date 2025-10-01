@@ -336,7 +336,7 @@ export const useWineOcr = () => {
       let shopifyCount = 0;
 
       try {
-        const userId = localStorage.getItem("user_id") || "me"; // ✅ unified key
+        const userId = localStorage.getItem("wine_ocr_user_id") ; // ✅ unified key
 
         const chunks: DriveUploadSelection[][] = [];
         for (let i = 0; i < selections.length; i += concurrency) {
