@@ -249,7 +249,7 @@ export const WineOcrWizard: React.FC = () => {
             </div>
           )}
           {ocrMs != null && !ocrLoading && ocrLocked && (
-            <div className="text-xs text-gray-500">OCR completed in {(ocrMs / 1000).toFixed(2)} s</div>
+           <div className="text-xs text-gray-500">OCR completed in {formatTime(ocrMs / 1000)}</div>
           )}
           {compareMs != null && !compareLoading && compareLocked && (
             <div className="text-xs text-gray-500">Compare completed in {(compareMs / 1000).toFixed(2)} s</div>
