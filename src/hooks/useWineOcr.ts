@@ -320,7 +320,7 @@ export const useWineOcr = () => {
   // Upload to Drive & Shopify (concurrent batches)
   // ----------------------
   const uploadToDriveAndShopify = useCallback(
-    async (selections: DriveUploadSelection[], concurrency = 5) => {
+    async (selections: DriveUploadSelection[], concurrency = 10) => {
       setGlobalUploading(true);
       setError(null);
       setSuccessMessage(null);
